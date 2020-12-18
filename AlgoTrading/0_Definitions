@@ -1,0 +1,66 @@
+TYPES OF MARKET ORDERS :
+
+Market :        Buy or sell at the best available price in the current market.
+                Fastest and most reliable way to enter or exit a trade and provides the most likely method of getting in or out of a trade quickly.
+                It's a good idea to look closely at the bid-ask spread before placing a market order.
+
+
+Limit :         Buy/sell at a specified price or better (is not guaranteed to be filled).
+                Buy  : executed only at the limit price (or lower)
+                Sell : executed only at the limit price (or higher)
+
+
+Stop-Loss :     Activate a market order once a stop price has been met.   Warning : != Stop-Limit !
+
+
+Stop-Limit :    Buy/sell at given price when a stop price has been met.
+                Once the stop price is reached, the stop-limit order becomes a limit order to buy or sell at the limit price or better.
+                A stop-limit order requires the setting of two price points :
+                    Stop  : The start of the specified target price for the trade.
+                    Limit : The outside of the price target for the trade.
+                A timeframe must also be set, during which the stop-limit order is considered executable.
+
+                SELL : Limit Price > Market Price > Stop Price
+                BUY  : Limit Price < Market Price < Stop Price
+
+                Buy example :   The current price is at $170. We place a stop at $180, limit at $185.
+                                If the price moves above $180, the buy order is activated as long as it can be filled under $185.
+
+
+Take Profit :   Limit order that specifies the exact price at which to close out an open position for a profit.
+
+
+Take Profit
+Limit       :   ?
+
+
+Limit Maker :   Limit orders that will be rejected if they would immediately match and trade as a taker.
+
+
+OCO :           One-Cancels-the-Other.
+                Pair of orders (Limit + Stop-Limit) on the same side stipulating that if one order executes, then the other order is automatically canceled.
+                The Time In Force for OCO orders should be identical.
+
+                SELL : Limit Price > Market Price > Stop price of stop-limit order
+                BUY  : Limit Price < Market Price < Stop price of stop-limit order
+
+___________________________________________________________________________________________________________________________________________________
+
+Taker :         Order that trades immediately before going on the order book (partially or fully).
+                Therefore : Market, Limit IOC & Limit FOK orders are always Takers as they can never go on the order book.
+                These trades are "taking" volume off of the order book, and therefore called the "taker."
+
+Maker :         Order that goes on the order book (partially or fully).
+
+
+
+
+
+
+
+
+
+
+
+
+

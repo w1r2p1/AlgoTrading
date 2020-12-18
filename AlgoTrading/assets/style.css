@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700');
+
+body {
+    font-family: "Open Sans", sans-serif;
+    font-weight: 100;
+    color: #a3a7b0;
+    background-color: #23272c;
+    margin: 0;
+    padding: 0;}
+
+Hr {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.20);
+    border: 0;
+    margin: 0 0 1% 0;}
+
+H2 {
+    font-family: "Open Sans", sans-serif;
+    font-weight: 300;}
+
+H3 {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 1.5rem !important;
+    margin: 0 11% 1% 5%;}
+
+H4 {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 1rem !important;
+    /*margin: 0 0 2% 0;*/
+    /*text-align: center;*/
+    color: #75BAF2;}
+
+p {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 1rem !important;
+    margin: 0 0 0 0;
+    /*text-align: center;*/
+    /*color: #75BAF2;*/
+}
+Td {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 0.8rem !important;
+    margin: 0 0 0 0;
+    /*text-align: center;*/
+    color: #75BAF2;
+}
+
+#header {
+    max-width: 100%;
+    padding: 1rem 10rem;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#logo {
+    width: 150px;
+    height: 30px;
+    /*padding-left: 60px;*/
+}
+
+
+/*#Dropdown_pair {*/
+/*    !*background-color: green;*!*/
+/*    color: #75BAF2;*/
+/*}*/
+
+
+#graph-1, #graph-2 {
+    /*margin: 1% 7% 1% 7%;*/
+}
+
+#pair_graph {
+    margin: 3% 1% 3% 1%;}
+
+#macd_graph {
+    margin: 3% 5.5% 3% 1%;}     /* The lest margin is not the same as pair_graph because of the second y axis in pair_graph */
+
+._dash-undo-redo {
+    display: none}
+
+.ui-dashboard-column
+{
+    border-style : solid;
+    border-width : 5px;
+}

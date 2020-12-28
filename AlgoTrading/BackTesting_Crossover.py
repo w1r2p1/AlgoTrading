@@ -58,10 +58,10 @@ class BackTesting:
 		# To simplify the code, shift the next minute data 1 place backwards so that the indice of the next minute candle matches the hours' one that gives the signal.
 		# self.df.loc[:,pair+'_m'] = self.df.loc[:,pair+'_m'].shift(-1)
 
-		# min_ = int(len(self.df.index)*0.2)
-		# # max_ = None
-		# max_ = int(len(self.df.index)*0.5)
-		# self.df = self.df.iloc[min_:max_]
+		min_ = int(len(self.df.index)*0.2)
+		# max_ = None
+		max_ = int(len(self.df.index)*0.3)
+		self.df = self.df.iloc[min_:max_]
 
 		# Drop all the non-necessary minute data : since we shifted, drop averythime at non hours indexes, where hours data is at NaN
 		self.df.dropna(inplace=True)
@@ -214,7 +214,6 @@ class BackTesting:
 		fast_name = f'{indic}_{length_slow}'
 		slow_name = f'{indic}_{length_fast}'
 
-		# Pairs and spread ______________________________________________________________________________________________________________________
 		min_indice = -2000
 		max_indice = None
 		fig, ax1 = plt.subplots(figsize=(14,10))
@@ -285,80 +284,75 @@ class BackTesting:
 
 if __name__ == '__main__':
 
-	backtester = BackTesting('1h')
-	backtester.backtest(quote    		  = 'BTC',
-						pair      		  = 'ETHBTC',
-						starting_balances = dict(quote=1, base=0),
-						indic			  = 'ssf',
-						length_fast       = 5*24,		# 5*24
-						length_slow       = 40*24,		# 40*24
-						alloc_pct         = 100,
-						plot              = True,
-						stop_loss_pct     = 2,
-						)
+	backtester = BackTesting('5m')
+	# backtester.backtest(quote    		  = 'BTC',
+	# 					pair      		  = 'ETHBTC',
+	# 					starting_balances = dict(quote=1, base=0),
+	# 					indic			  = 'ssf',
+	# 					length_fast       = 5*12,		# 5*24
+	# 					length_slow       = 60*12,		# 40*24
+	# 					alloc_pct         = 100,
+	# 					plot              = True,
+	# 					stop_loss_pct     = 2,
+	# 					)
 
-	# backtester.test_sideway_stationnarity(quote     = 'BTC',
-	# 									  pair      = 'ETHBTC',
-	# 									  length    = 10,
-	# 									  )
+	results                  = dict()
+	results['length_fast']   = []
+	results['length_slow']   = []
+	results['stop_loss_pct'] = []
+	results['quote_profits'] = []
 
-	# results                  = dict()
-	# results['length_fast']   = []
-	# results['length_slow']   = []
-	# results['stop_loss_pct'] = []
-	# results['quote_profits'] = []
-	#
-	# # Find the best lengths for this timeframe
-	# for length_fast_ in np.linspace(start=1, stop=9, num=9):
-	# 	for length_slow_ in np.linspace(start=20, stop=60, num=5):
-	# 		for stop_loss_pct_ in np.linspace(start=2, stop=4, num=3):
-	# 			quote_profits_, _ = backtester.backtest(quote   		    = 'BTC',
-	# 														  pair      		= 'ETHBTC',
-	# 														  starting_balances = dict(quote=1, base=0),
-	# 														  indic			    = 'ssf',
-	# 														  length_fast       = int(length_fast_)*24,
-	# 														  length_slow       = int(length_slow_)*24,
-	# 														  alloc_pct         = 100,
-	# 														  plot              = False,
-	# 														  stop_loss_pct     = stop_loss_pct_,
-	# 														  )
-	#
-	# 			print(f'length_fast, length_slow, stop_loss_pct = {length_fast_}, {length_slow_}, {stop_loss_pct_}')
-	# 			print(f'BTC profits on ETH = {round(quote_profits_, 2)}%')
-	# 			print('________________________')
-	#
-	# 			results['length_fast'].append(length_fast_)
-	# 			results['length_slow'].append(length_slow_)
-	# 			results['stop_loss_pct'].append(stop_loss_pct_)
-	# 			results['quote_profits'].append(quote_profits_)
-	#
-	#
-	# # ______________________________________________
-	# # Plot the results of the grid search
-	# df_ = pd.DataFrame({'length_fast'   : results['length_fast'],
-	# 				    'length_slow'   : results['length_slow'],
-	# 				    'stop_loss_pct' : results['stop_loss_pct'],
-	# 				    'quote_profits' : results['quote_profits']})
-	#
-	# import plotly.graph_objs as go
-	# fig = go.Figure()
-	# fig.add_trace(go.Scatter3d(x=df_.loc[:,'length_fast'], y=df_.loc[:,'length_slow'], z=df_.loc[:,'stop_loss_pct'],
-	# 						   mode='markers',
-	# 						   marker=dict(
-	# 									size       = 5,
-	# 									color      = df_.loc[:,'quote_profits'],      	# set color to an array/list of desired values
-	# 									colorscale = 'Viridis',                   		# choose a colorscale
-	# 									opacity    = 0.8,
-	# 									colorbar   = dict(thickness = 20,
-	# 													  title     = "BTC profits %"),
-	# 									)
-	# 						   )
-	# 			  )
-	# fig.update_layout(scene = dict(
-	# 							   xaxis_title='Length fast * 24',
-	# 							   yaxis_title='Length slow * 24',
-	# 							   zaxis_title='stop_loss_pct',
-	# 							   ),
-	# 				  title = "ETHBTC Simple Crossover - 1h - Sharpe ratio",
-	# 				  )
-	# fig.show()
+	# Find the best lengths for this timeframe
+	for length_fast_ in np.linspace(start=5, stop=20, num=4):
+		for length_slow_ in np.linspace(start=20, stop=60, num=5):
+			for stop_loss_pct_ in np.linspace(start=2, stop=4, num=3):
+				quote_profits_, _ = backtester.backtest(quote   		  = 'BTC',
+													    pair      		  = 'ETHBTC',
+													    starting_balances = dict(quote=1, base=0),
+													    indic			  = 'ssf',
+													    length_fast       = int(length_fast_)*12,
+													    length_slow       = int(length_slow_)*12,
+													    alloc_pct         = 100,
+													    plot              = False,
+												   	    stop_loss_pct     = stop_loss_pct_,
+												    	)
+
+				print(f'length_fast, length_slow, stop_loss_pct = {length_fast_}, {length_slow_}, {stop_loss_pct_}')
+				print(f'BTC profits on ETH = {round(quote_profits_, 2)}%')
+				print('________________________')
+
+				results['length_fast'].append(length_fast_)
+				results['length_slow'].append(length_slow_)
+				results['stop_loss_pct'].append(stop_loss_pct_)
+				results['quote_profits'].append(quote_profits_)
+
+
+	# ______________________________________________
+	# Plot the results of the grid search
+	df_ = pd.DataFrame({'length_fast'   : results['length_fast'],
+					    'length_slow'   : results['length_slow'],
+					    'stop_loss_pct' : results['stop_loss_pct'],
+					    'quote_profits' : results['quote_profits']})
+
+	import plotly.graph_objs as go
+	fig = go.Figure()
+	fig.add_trace(go.Scatter3d(x=df_.loc[:,'length_fast'], y=df_.loc[:,'length_slow'], z=df_.loc[:,'stop_loss_pct'],
+							   mode='markers',
+							   marker=dict(
+										size       = 5,
+										color      = df_.loc[:,'quote_profits'],      	# set color to an array/list of desired values
+										colorscale = 'Viridis',                   		# choose a colorscale
+										opacity    = 0.8,
+										colorbar   = dict(thickness = 20,
+														  title     = "BTC profits %"),
+										)
+							   )
+				  )
+	fig.update_layout(scene = dict(
+								   xaxis_title='Length fast * 12',
+								   yaxis_title='Length slow * 12',
+								   zaxis_title='stop_loss_pct',
+								   ),
+					  title = "ETHBTC Simple Crossover - 1h - Sharpe ratio",
+					  )
+	fig.show()

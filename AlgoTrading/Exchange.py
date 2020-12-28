@@ -313,8 +313,6 @@ class Binance:
 		# Convert timestamp in milliseconds to datetime
 		df['time'] = pd.to_datetime(df['time'] * 1000000, infer_datetime_format=True)
 
-		print(df)
-
 		return df
 
 

@@ -16,7 +16,7 @@ class Histories:
     def __init__(self):
         self.database  = BotDatabase("database.db")
         self.exchange  = Binance(filename='credentials.txt')
-        self.timeframe = '1m'
+        self.timeframe = '5m'
         self.ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()]))             # ['ETH', 'BTC']
 
 

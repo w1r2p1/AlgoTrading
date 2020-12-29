@@ -108,7 +108,7 @@ class OrderBookAnalysis:
 
             oldest_stream_data_from_stream_buffer = binance_websocket_api_manager.pop_stream_data_from_stream_buffer()
 
-            if oldest_stream_data_from_stream_buffer is False:
+            if oldest_stream_data_from_stream_buffer:
                 time.sleep(duration_between_refreshes/1000)
 
             else:

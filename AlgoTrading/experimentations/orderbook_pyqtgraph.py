@@ -1,4 +1,3 @@
-# from PyQt5 import QtCore, QtWidgets, QtGui
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
@@ -8,17 +7,36 @@ import numpy as np
 from datetime import datetime
 import sys
 from Exchange import Binance
+# from datetime import timedelta
+import datetime
+from collections import deque
 
-duration_between_refreshes = 100         # in milliseconds
+# Parameters for the plot
+duration_between_refreshes = 100         # in milliseconds. 1000ms or 100ms
+depth  = 20
+maxlen = 200
 
-class MyWidget(QtGui.QMainWindow):
+
+class TimeAxisItem(pg.AxisItem):
+    # Class that holds the properties for a datetime axis (for the 2nd and 3rd plots)
+    def __init__(self, *args, **kwargs):
+        super(TimeAxisItem, self).__init__(*args, **kwargs)
+
+    def tickStrings(self, values, scale, spacing):
+        return [self.int2dt(value).strftime("%H:%M:%S.%f") for value in values]
+
+    @staticmethod
+    def int2dt(ts, ts_mult=1e6):
+        return datetime.datetime.utcfromtimestamp(float(ts)/ts_mult)
+
+class RealTimeOrderBook(QtGui.QMainWindow):
 
     def __init__(self,
                  parent   = None,
                  exchange = Binance(filename='../credentials.txt'),
                  quote    = 'BTC',
                  base     = 'ETH'):
-        super(MyWidget, self).__init__(parent=parent)
+        super(RealTimeOrderBook, self).__init__(parent=parent)
 
         # Websocket ______________________________________________________________________________________________________________
         self.exchange = exchange
@@ -38,19 +56,21 @@ class MyWidget(QtGui.QMainWindow):
             print("No internet connection?")
             sys.exit(1)
 
-        # Top <levels> bids and asks, pushed every second. Valid <levels> are 5, 10, or 20.
-        self.binance_websocket_api_manager.create_stream(channels     = f"depth20@{duration_between_refreshes}ms",
+        # Top <levels> bids and asks, pushed every X milliseconds. Valid <levels> are 5, 10, or 20.
+        self.binance_websocket_api_manager.create_stream(channels     = f"depth{depth}@{duration_between_refreshes}ms",
                                                          markets      = self.base + self.quote,
-                                                         stream_label = 'depth20',
+                                                         stream_label = f'depth{depth}',
                                                          output       = "UnicornFy",
                                                          api_key      = self.binance_keys['api_key'],
-                                                         api_secret   = self.binance_keys['secret_key']
+                                                         api_secret   = self.binance_keys['secret_key'],
                                                          )
         # PqtGraph ______________________________________________________________________________________________________________
 
         # Define a top-level widget to hold everything
         self.mainbox = QtGui.QWidget()
         self.setCentralWidget(self.mainbox)
+        self.setWindowTitle('Live OrderBook')
+        self.setGeometry(0, 0, 1000, 800)      # synthax : setGeometry(left anchor, top anchor, width, height)
 
         lay = QtGui.QVBoxLayout(self.mainbox)
         self.canvas = pg.GraphicsLayoutWidget()
@@ -58,37 +78,41 @@ class MyWidget(QtGui.QMainWindow):
         lay.addWidget(self.canvas)
         lay.addWidget(self.label)
 
-        # self.mainbox = QtGui.QWidget()
-        # self.setCentralWidget(self.mainbox)
-        # self.mainbox.setLayout(QtGui.QVBoxLayout())
-        #
-        # self.canvas = pg.GraphicsLayoutWidget()
-        # self.mainbox.layout().addWidget(self.canvas)
-        #
-        # self.label = QtGui.QLabel()
-        # self.mainbox.layout().addWidget(self.label)
-
-
         # For the fps display
         self.counter = 0
         self.fps = 0.
         self.lastupdate = time.time()
 
+        # Set a timer to update the pots regularly
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(duration_between_refreshes)
         self.timer.start()
 
         # Construct the window as empty plots that will be populated later on
-        # First plot : orderbook
+        # First plot : orderbook ___________________________________________________________________________________________
         self.first_plot = self.canvas.addPlot(title=f'{self.base.upper()}{self.quote.upper()} Order Book')
-        self.orderbook_bids = self.first_plot.plot([], pen=None, symbolBrush='g', symbolSize=5, symbolPen=None)
-        self.orderbook_asks = self.first_plot.plot([], pen=None, symbolBrush='r', symbolSize=5, symbolPen=None)
-        self.midprice_line = pg.InfiniteLine()
+        self.first_plot.addLegend()     # Must be called before creating the plot
+        self.orderbook_bids = self.first_plot.plot([], pen=None, symbolBrush='g', symbolSize=5, symbolPen=None, name="Bids")
+        self.orderbook_asks = self.first_plot.plot([], pen=None, symbolBrush='r', symbolSize=5, symbolPen=None, name="Asks")
+        self.midprice_line = pg.InfiniteLine(angle=90)  # Vertical line
         self.first_plot.addItem(self.midprice_line)
         self.canvas.nextRow()
-        # Second plot : imbalance
-        second_plot = self.canvas.addPlot(title='Imbalance')
-        self.imbalance = second_plot.plot([], pen=None, symbolBrush=(255,0,0), symbolSize=5, symbolPen=None)
+
+        # Second plot : imbalance evolution _______________________________________________________________________________
+        self.second_plot = self.canvas.addPlot(title='Imbalance', axisItems={'bottom': TimeAxisItem(orientation='bottom')})
+        self.second_plot.addLegend()
+        self.imbalance_plt = self.second_plot.plot([], name="Imbalance")
+        self.zeroline_imbalance = pg.InfiniteLine(angle=0)  # Horizontal line
+        self.second_plot.addItem(self.zeroline_imbalance)
+        self.dates      = deque(maxlen=maxlen)              # limit the size of the lists
+        self.imbalances = deque(maxlen=maxlen)
+        self.canvas.nextRow()
+
+        # Third plot : midprice evolution _________________________________________________________________________________
+        self.third_plot = self.canvas.addPlot(title='Midprice', axisItems={'bottom': TimeAxisItem(orientation='bottom')})
+        self.third_plot.addLegend()
+        self.midprice_plt = self.third_plot.plot([], name="Midprice")
+        self.midprices = deque(maxlen=maxlen)
 
         # Updarte the graph every X ms
         self.timer.timeout.connect(self.fetch_new_data)
@@ -100,15 +124,13 @@ class MyWidget(QtGui.QMainWindow):
         imbalances = []
         weighted_bid_volumes = []
         weighted_ask_volumes = []
-        x_max_range = 100
 
         if self.binance_websocket_api_manager.is_manager_stopping():
             exit(0)
 
         oldest_stream_data_from_stream_buffer = self.binance_websocket_api_manager.pop_stream_data_from_stream_buffer()
 
-
-        if oldest_stream_data_from_stream_buffer is not None:
+        if oldest_stream_data_from_stream_buffer:
             try:
                 bids = oldest_stream_data_from_stream_buffer['bids']
                 asks = oldest_stream_data_from_stream_buffer['asks']
@@ -118,57 +140,34 @@ class MyWidget(QtGui.QMainWindow):
                 asks_quantities = np.array([float(ask[1]) for ask in asks])
                 midprice = (asks_prices[0]+bids_prices[0])/2
 
-                weights = np.exp(-0.5*np.arange(len(bids)))
-                weighted_bid_volume = np.multiply(weights, bids_quantities).sum()    # bids are sorted from larger to smaller prices
-                weighted_ask_volume = np.multiply(weights, asks_quantities).sum()    # asks are sorted from smaller to larger prices
-
-                # https://tspace.library.utoronto.ca/bitstream/1807/70567/3/Rubisov_Anton_201511_MAS_thesis.pdf     (PAGE 6)
-                imbalance = (weighted_bid_volume - weighted_ask_volume) / (weighted_bid_volume + weighted_ask_volume)       # > 0 : imbalance in favor of bid side, < 0 ask side
-
-                # First plot : live orderbook _____________________________________________________________________________
+                # First plot : live orderbook __________________________________________________________________________________________
                 self.orderbook_bids.setData(bids_prices, bids_quantities)
                 self.orderbook_asks.setData(asks_prices, asks_quantities)
                 self.midprice_line.setValue(midprice)
                 max_range = max(max(bids_prices)-min(bids_prices), max(asks_prices)-min(asks_prices))
-                self.first_plot.setXRange(midprice - max_range*1.1,
-                                          midprice + max_range*1.1,
-                                          padding=0)
+                self.first_plot.setXRange(midprice - max_range*1.1, midprice + max_range*1.1, padding=0)
+                self.first_plot.setYRange(0, 30, padding=0)
 
-                # # Second plot : imbalance time series ___________________________________________________________________
-                # dates.append(datetime.fromtimestamp(oldest_stream_data_from_stream_buffer['last_update_id']/1000))
-                dates.append(datetime.fromtimestamp(int(str(oldest_stream_data_from_stream_buffer['last_update_id']))))
-                imbalances.append(imbalance)
+                # Second plot : imbalance evolution ____________________________________________________________________________________
+                weights = np.exp(-0.5*np.arange(len(bids)))
+                weighted_bid_volume = np.multiply(weights, bids_quantities).sum()    # bids are sorted from larger to smaller prices
+                weighted_ask_volume = np.multiply(weights, asks_quantities).sum()    # asks are sorted from smaller to larger prices
+                # https://tspace.library.utoronto.ca/bitstream/1807/70567/3/Rubisov_Anton_201511_MAS_thesis.pdf     (PAGE 6)
+                imbalance = (weighted_bid_volume - weighted_ask_volume) / (weighted_bid_volume + weighted_ask_volume)       # > 0 : imbalance in favor of bid side, < 0 ask side
+                # # Store the best bid and ask data
+                # weighted_bid_volumes.append(weighted_bid_volume)
+                # weighted_ask_volumes.append(weighted_ask_volume)
+                self.dates.append(oldest_stream_data_from_stream_buffer['last_update_id']/1000)
+                self.imbalances.append(imbalance)
+                self.imbalance_plt.setData(x=list(self.dates), y=list(self.imbalances))
+                self.zeroline_imbalance.setValue(0) # Horizontal zeroline
 
-                # Store the best bid and ask data
-                weighted_bid_volumes.append(weighted_bid_volume)
-                weighted_ask_volumes.append(weighted_ask_volume)
-
-                if len(dates) >= x_max_range:
-                    # ax3.set_xlim(dates[-x_max_range], dates[-1])
-                    # self.imbalance.setRange(xRange=[5,20])
-                    # limit the size of the lists so that we only store the displayed data
-                    dates = dates[-x_max_range:]
-                    imbalances = imbalances[-x_max_range:]
-                    weighted_bid_volumes = weighted_bid_volumes[-x_max_range:]
-                    weighted_ask_volumes = weighted_ask_volumes[-x_max_range:]
-                    # Display dotted lines corresponding to the last max and min values of the imbalance
-                    # ax3.axhline(y=max(imbalances[-x_max_range:]), c='black', linestyle=':')
-                    # ax3.axhline(y=min(imbalances[-x_max_range:]), c='black', linestyle=':')
-                # ax3.set_ylim(-1.5, 1.5)
-                # ax3.plot(dates, imbalances,           c='black', label=f"Imbalance value")
-                # ax4.plot(dates, weighted_bid_volumes, c='blue',  label=f"best_bid_price", alpha=0.5)
-                # ax4.plot(dates, weighted_ask_volumes, c='green', label=f"best_ask_price", alpha=0.5)
-                # # ax4.set_ylim(midprice*0.9999, midprice*1.0001)
-                # ax3.set_title(f'Imbalance value')
-                # ax3.set_xlabel('Date')
-                # ax3.set_ylabel(f'Imbalance value')
-                # ax4.set_ylabel(f'Weighted quantities')
-                # ax3.legend(loc="upper left")
-                # ax3.tick_params(axis='y', color='red')
-                self.imbalance.setData(dates, imbalances)
+                # Third plot : midprice evolution _____________________________________________________________________________________
+                self.midprices.append(midprice)
+                self.midprice_plt.setData(x=list(self.dates), y=list(self.midprices))
 
 
-            # Compute and display the fps in real time
+                # Compute and display the fps in real time ____________________________________________________________________________
                 now = time.time()
                 dt  = (now-self.lastupdate)
                 if dt <= 0:
@@ -176,7 +175,7 @@ class MyWidget(QtGui.QMainWindow):
                 fps2 = 1.0 / dt
                 self.lastupdate = now
                 self.fps = self.fps * 0.9 + fps2 * 0.1
-                tx = 'Mean Frame Rate: {fps:.1f} FPS'.format(fps=self.fps)
+                tx = 'Frame Rate: {fps:.1f} FPS'.format(fps=self.fps)
                 self.label.setText(tx)
                 self.counter += 1
 
@@ -185,12 +184,15 @@ class MyWidget(QtGui.QMainWindow):
 
 
 
-def main():
+if __name__ == "__main__":
+
+    # print(datetime.datetime.utcfromtimestamp(int(1556876873656/1000)))
+    # print(datetime.datetime.utcfromtimestamp(123456785))
+    # print(datetime.datetime.utcfromtimestamp(2046077850))
+    #
+    # print(datetime.datetime(1970, 1, 1) + datetime.timedelta(milliseconds=2046077850//1000))
+
     app = QtGui.QApplication(sys.argv)
-    thisapp = MyWidget()
+    thisapp = RealTimeOrderBook()
     thisapp.show()
     sys.exit(app.exec_())
-
-
-if __name__ == "__main__":
-    main()

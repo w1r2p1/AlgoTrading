@@ -17,7 +17,11 @@ import datetime
 from   datetime import datetime, timedelta
 from   decimal import Decimal
 import re
+import os
 
+# Clear file database.db
+with open('assets/database.db', "w"):
+    pass
 
 class Strategy:
 
@@ -52,7 +56,10 @@ class Strategy:
 
 
 exchange = Binance(filename='assets/credentials.txt')
-database = BotDatabase(name="assets/database.db")
+# database = BotDatabase(name="/assets/database.db")
+database = BotDatabase(name=os.path.join(os.getcwd(), 'assets', 'database.db'))             # name =  'C:\Users\grego\Documents\GitHub\AlgoTrading\AlgoTrading\assets\database.db'
+# database = BotDatabase(name=f"r{os.path.join(os.getcwd(), 'assets', 'database.db')}")       # name = r'C:\Users\grego\Documents\GitHub\AlgoTrading\AlgoTrading\assets\database.db'
+
 strategy = Strategy(name='SSF_Crossover')
 
 
@@ -121,23 +128,23 @@ class Trading:
             if pairs == {}:
                 sys.exit("Could not get the pairs from Binance to create the bots. Exiting the script.")
 
-            for quote in AllQuoteassets:
-                sp.text = f"Creating the bots on {quote}"
+            for quote_ in AllQuoteassets:
+                sp.text = f"Creating the bots on {quote_}"
                 sp.start()
                 # Create the bots that don't already exist in parallel. Use the default number of workers in Pool(), which given by os.cpu_count(). Here, 8 are used.
-                pool  = Pool()
-                func1 = partial(create_bot, quote_=quote, timeframe_=timeframe)
-                pairs_without_bot = [pair for pair in pairs[quote] if not database.GetBot(pair)]
-                pool.map(func1, pairs_without_bot)
-                pool.close()
-                pool.join()
+                pool_  = Pool()
+                func_bot = partial(create_bot, quote_=quote_, timeframe_=timeframe)
+                pairs_without_bot = [pair for pair in pairs[quote_] if not database.GetBot(pair)]
+                pool_.map(func_bot, pairs_without_bot)
+                pool_.close()
+                pool_.join()
                 sp.stop()
-                if quote in WantedQuoteAssets and quote in existing_quoteassets:
-                    print(f"You want to trade on {quote}, which is already in the database. {len(pairs_without_bot)} new pairs available. Total = {len(pairs[quote])}.")
-                elif quote in WantedQuoteAssets:
-                    print(f"You want to trade on {quote}, which is not in the database. Created {len(pairs_without_bot)} bots.")
+                if quote_ in WantedQuoteAssets and quote_ in existing_quoteassets:
+                    print(f"You want to trade on {quote_}, which is already in the database. {len(pairs_without_bot)} new pairs available. Total = {len(pairs[quote_])}.")
+                elif quote_ in WantedQuoteAssets:
+                    print(f"You want to trade on {quote_}, which is not in the database. Created {len(pairs_without_bot)} bots.")
                 else:
-                    print(f"Note that {quote} is already existing in the database. {len(pairs_without_bot)} new pairs available. Total = {len(pairs[quote])}.")
+                    print(f"Note that {quote_} is already existing in the database. {len(pairs_without_bot)} new pairs available. Total = {len(pairs[quote_])}.")
 
         create_bots()
 
@@ -195,7 +202,7 @@ class Trading:
             return None
 
         # signal = strategy.find_signal(df=df)		# check for a signal (returns 'buy'/'sell')
-        signal = random.choice([True, False])
+        signal = random.choice(['buy', 'sell'])
 
         if signal == 'buy':
 
@@ -242,14 +249,14 @@ class Trading:
                 buy_order_result = {**dummy_buy_order_result, **buy_order_result}
 
             if "code" in buy_order_result:
-                formatted_transactTime = datetime.utcfromtimestamp(Decimal(buy_order_result['transactTime'])/1000).strftime('%H:%M:%S')
+                formatted_transactTime = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime('%H:%M:%S')
                 print(f"\t{formatted_transactTime} - Error in placing a buy {'test' if self.paper_trading else ''} order on {pair} at {buy_price} :/")
                 database.UpdateBot(pair=pair, status='', quoteBalance='')
                 print(pair, buy_order_result)
                 return None
 
             else:
-                text = "\t{time} - Success in placing a buy {test} order on {pair} \t: bought {quantity} {base} \tat {price} {quoteasset} for {quoteQty} {quoteasset}.".format(time       = datetime.utcfromtimestamp(Decimal(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                text = "\t{time} - Success in placing a buy {test} order on {pair} \t: bought {quantity} {base} \tat {price} {quoteasset} for {quoteQty} {quoteasset}.".format(time       = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
                                                                                                                                                                                test       = 'test' if self.paper_trading else '',
                                                                                                                                                                                pair       = pair,
                                                                                                                                                                                quantity   = buy_order_result['executedQty'],
@@ -279,7 +286,7 @@ class Trading:
                                    status           = 'Looking to exit',
                                    quoteBalance     = buy_order_result['cummulativeQuoteQty'],
                                    baseBalance      = buy_order_result['executedQty'],
-                                   last_order_date  = datetime.utcfromtimestamp(Decimal(buy_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
+                                   last_order_date  = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
                                    number_of_orders = +1,                                                                # Added
                                    bot_quote_fees   = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),         # Added to the current bot_quote_fees
                                    bot_BNB_fees     = format(round(BNB_fee,   bot['BNB_precision']),       'f'))         # Added
@@ -302,7 +309,7 @@ class Trading:
                 # Send a text to telegram
                 # self.send_text_to_telegram(text)
 
-                dict_to_fill[pair] = [datetime.utcfromtimestamp(Decimal(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                dict_to_fill[pair] = [datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
                                       Decimal(buy_order_result['price']).normalize(),
                                       Decimal(buy_order_result['executedQty']).normalize(),
                                       Decimal(buy_order_result['cummulativeQuoteQty']).normalize()]
@@ -327,7 +334,7 @@ class Trading:
             return None
 
         # signal = strategy.find_signal(df=df)		# check for a signal (returns 'buy'/'sell')
-        signal = random.choice([True, False])
+        signal = random.choice(['buy', 'sell'])
 
         if signal == 'sell':
 
@@ -377,7 +384,7 @@ class Trading:
                 sell_order_result = {**dummy_sell_order_result, **sell_order_result}
 
             if "code" in sell_order_result:
-                formatted_transactTime = datetime.utcfromtimestamp(Decimal(sell_order_result['transactTime'])/1000).strftime('%H:%M:%S')
+                formatted_transactTime = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime('%H:%M:%S')
                 print(f"\t{formatted_transactTime} - Error in placing a sell {'test' if self.paper_trading else ''} order on {pair} at {sell_price} :/")
                 print(pair, sell_order_result)
                 return None
@@ -393,9 +400,9 @@ class Trading:
                 BNB_fee           = quote_fee / Decimal(exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
 
                 # How long we have been holding the asset for
-                hold_timedelta = datetime.utcfromtimestamp(Decimal(sell_order_result['transactTime'])/1000) - datetime.strptime(dict(database.GetBot(pair=pair))['last_order_date'], "%Y-%m-%d %H:%M:%S")
+                hold_timedelta = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000) - datetime.strptime(dict(database.GetBot(pair=pair))['last_order_date'], "%Y-%m-%d %H:%M:%S")
 
-                text = "\t{time} - Success in placing a sell {test} order on {pair} \t : sold {quantity} {base} at {price} {quoteasset} for {quoteQty} {quoteasset}. \t Profit : {profit} {quoteasset}".format(time       = datetime.utcfromtimestamp(Decimal(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                text = "\t{time} - Success in placing a sell {test} order on {pair} \t : sold {quantity} {base} at {price} {quoteasset} for {quoteQty} {quoteasset}. \t Profit : {profit} {quoteasset}".format(time       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
                                                                                                                                                                                                                test       = 'test' if self.paper_trading else '',
                                                                                                                                                                                                                pair       = pair,
                                                                                                                                                                                                                quantity   = sell_order_result['executedQty'],
@@ -419,7 +426,7 @@ class Trading:
                                    status                = 'Looking to enter',
                                    quoteBalance          = '',
                                    baseBalance           = '',
-                                   last_order_date       = datetime.utcfromtimestamp(Decimal(sell_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
+                                   last_order_date       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
                                    last_profit           = str(profit),
                                    bot_profit            = format(round(profit,            bot['quoteAssetPrecision']), 'f'),       # Added to the current bot_profit
                                    bot_quote_fees        = format(round(quote_fee,         bot['quoteAssetPrecision']), 'f'),       # Added
@@ -446,7 +453,7 @@ class Trading:
                 # Send a text to telegram
                 # self.send_text_to_telegram(text)
 
-                dict_to_fill[pair] = [datetime.utcfromtimestamp(Decimal(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                dict_to_fill[pair] = [datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
                                       Decimal(sell_order_result['price']).normalize(),
                                       Decimal(sell_order_result['executedQty']).normalize(),
                                       Decimal(sell_order_result['cummulativeQuoteQty']).normalize()]
@@ -538,6 +545,7 @@ class Trading:
         next_candle = None
         now = datetime.now()
 
+        # Find the time of the next candle
         if parsed_timeframe[1] == 'm':
             if now.minute < 60-int(parsed_timeframe[0]):
                 min_till_candle = int(parsed_timeframe[0])-(now.minute % int(parsed_timeframe[0]))
@@ -636,13 +644,9 @@ class Trading:
 
 
 
-
-
 if __name__ == "__main__":
 
-    # Clear file database.db
-    # with open('database.db', "w"):
-    #     pass
+
 
     # Parameters
     timeframe         = '1m'

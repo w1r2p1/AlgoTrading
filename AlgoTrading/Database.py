@@ -9,10 +9,10 @@ class BotDatabase:
 		# sqlite3.register_adapter(Decimal, DecimalToString)          	# Decimal type converted to string before being written to the db.
 		# sqlite3.register_converter("decimal", convert_to_decimal)		# bytestring from the database into a custom Python type
 		self.name = name
-		self.Initialise()
+		self.initialise()
 
 
-	def Initialise(self):
+	def initialise(self):
 		""" Initialises the Database """
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -23,7 +23,6 @@ class BotDatabase:
 		c.execute('''CREATE TABLE IF NOT EXISTS bots (
 			pair					text primary key,
 			quoteasset 				text,
-			strategy 				text,
 			timeframe 				text,
 			status					text,
 			quoteBalance			text,
@@ -41,8 +40,7 @@ class BotDatabase:
 			quoteAssetPrecision  	int,
             baseAssetPrecision   	int,
             quotePrecision      	int,
-            BNB_precision			int,
-			test_orders				bool
+            BNB_precision			int
 			)''')
 
 		c.execute('''CREATE TABLE IF NOT EXISTS orders (
@@ -50,7 +48,7 @@ class BotDatabase:
 			pair 					text,
 			quoteasset				text,
 			side 					text,
-			type 					text,
+			order_type				text,
 			status 					text,
 			orderListId 			text,
 			clientOrderId 			text,
@@ -79,22 +77,6 @@ class BotDatabase:
 			internal_BNB_fees				text,
 			internal_profit_minus_fees		text
 			)''')
-
-		# c.execute('''CREATE TABLE IF NOT EXISTS histograms (
-		# 	pair							text,
-		# 	quoteasset 						text,
-		# 	indic							text,
-		# 	hist							text
-		# 	)''')
-
-		# c.execute('''CREATE TABLE IF NOT EXISTS prices_history (
-		# 	time			text primary key,
-		# 	open			text,
-		# 	high			text,
-		# 	low				text,
-		# 	close			text,
-		# 	volume       	text
-		# 	)''')
 
 		conn.commit()
 
@@ -136,6 +118,7 @@ class BotDatabase:
 														# [{botname:'bot_LTCBTC', pair:'LTCBTC, 'is_active'=True, ...}, {botname:'bot_ETHBTC', pair:'ETHBTC, 'is_active'=True, ...}]
 
 		except Exception as e:
+			print(e)
 			return False
 
 
@@ -270,7 +253,7 @@ class BotDatabase:
 		return orders                           	# We need to return None if there is no bot on the pair, so no dict(orders)
 
 
-	def GetQuoteassetOrders(self, quoteasset:str):
+	def get_quote_orders(self, quoteasset:str):
 		""" Gets all the orders we have made on a quoteasset"""
 
 		conn             = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -443,84 +426,3 @@ class BotDatabase:
 		balance = c.fetchone()
 
 		return dict(balance)['started_with']				# '2.50000000'
-
-
-	#
-	#
-	# """ PRICES HISTORY """
-	# def DeletePairPricesHistory(self):
-	# 	""" Creates an account balance for a quoteasset. """
-	#
-	# 	conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-	# 	conn.row_factory = sqlite3.Row
-	# 	c 				 = conn.cursor()
-	#
-	# 	# c.execute('DELETE * FROM prices_history WHERE quoteasset = ?', (quoteasset, ))
-	# 	try:
-	# 		c.execute('DROP TABLE IF EXISTS prices_history')
-	# 		print("prices_history table has been deleted.")
-	# 	except Exception as e:
-	# 		print("Could not delete prices_history table from the database. ", e)
-	#
-	# 	conn.commit()
-	#
-	#
-	# def SavePairPrices(self, pair:str, df):
-	#
-	# 	conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-	# 	conn.row_factory = sqlite3.Row
-	# 	c 				 = conn.cursor()
-	#
-	# 	table_name = pair + "_price_history"
-	# 	c.execute('''CREATE TABLE IF NOT EXISTS table_name (
-	# 		time			text primary key,
-	# 		open			text,
-	# 		high			text,
-	# 		low				text,
-	# 		close			text,
-	# 		volume       	text
-	# 		)''')
-	#
-	# 	print("table_name table has been created.")
-	#
-	#
-	# 	df.to_sql('prices_history', conn, if_exists='append', index=False)
-	#
-	#
-	# def GetPairPrices(self, pair:str, start, end):
-	#
-	# 	conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-	# 	conn.row_factory = sqlite3.Row
-	# 	c 				 = conn.cursor()
-	#
-	# 	return pd.read_sql('SELECT * FROM prices_history', conn)
-
-
-	""" HISTOGRAMS """
-	def SaveHistogram(self, quoteasset:str, pair:str, ind:str, hist):
-		""" Saves an histogram to the database. """
-
-		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-		# conn.row_factory = sqlite3.Row
-		c 				 = conn.cursor()
-
-
-		# df = pd.DataFrame([['SL','8/31/2017','81.9']], columns = ['pitch_type','game_date','release_speed'])
-
-		hist.to_sql('histograms',
-					conn,
-					if_exists='append',
-					# index=False
-					)
-
-		# values = (pair,
-		# 		  quoteasset,
-		# 		  ind,
-		# 		  hist)
-		#
-		# hist.to_sql(name='price2', con=conn)
-
-		# c.execute('INSERT INTO histograms VALUES (?, ?, ?, ?)', values)
-
-		conn.commit()
-

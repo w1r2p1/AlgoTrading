@@ -16,12 +16,12 @@ class HelperMethods:
     @staticmethod
     def total_orders(quote:str)->int:
         """ Returns the number of all the orders ever made on a quote. """
-        return len(list(database.GetQuoteassetOrders(quoteasset=quote)))
+        return len(list(database.get_quote_orders(quoteasset=quote)))
 
     @staticmethod
     def recent_orders(quote:str)->int:
         """ Returns the number of orders we did in the last 24 hours on a quote. """
-        return len([dict(order)['pair'] for order in list(database.GetQuoteassetOrders(quote))
+        return len([dict(order)['pair'] for order in list(database.get_quote_orders(quote))
                     if datetime.utcnow()-timedelta(hours=24) < datetime.strptime(dict(order)['transactTime'], "%Y-%m-%d %H:%M:%S")])
 
     @staticmethod
@@ -34,9 +34,10 @@ class HelperMethods:
         """Computes the average holding duration on a quoteasset."""
 
         hold_durations = []
-        for order in list(database.GetQuoteassetOrders(quoteasset=quote)):
+        for order in list(database.get_quote_orders(quoteasset=quote)):
             if dict(order)['side'] == 'SELL':
                 lst = dict(order)['hold_duration'].split(":")
+                print(lst)
                 if len(lst[0])<=2:
                     hold_durations.append(timedelta(hours=int(lst[0]), minutes=int(lst[1]), seconds=int(lst[2])))
                 else:

@@ -177,7 +177,7 @@ class Dashboard:
 
         fig = dict()
 
-        all_orders = list(database.GetQuoteassetOrders(quoteasset=quoteasset))
+        all_orders = list(database.get_quote_orders(quoteasset=quoteasset))
 
         profit_list = [Decimal(dict(order)['profit_minus_fees']) for order in all_orders if dict(order)['side'] == 'SELL']
         cummulative_profit_list1 = np.cumsum(profit_list).tolist()
@@ -443,7 +443,7 @@ class Dashboard:
 
                                 html.Tr([html.Td("Bot Timeframe"),          html.Td(bot['timeframe'].replace("m", "Min"), style={'color':'#a3a7b0'})]),
 
-                                html.Tr([html.Td("Strategy"),               html.Td(bot['strategy'], style={'color':'#a3a7b0'})]),
+                                html.Tr([html.Td("Strategy"),               html.Td(strategy.name, style={'color':'#a3a7b0'})]),
 
                                 html.Tr([html.Td("All orders"),             html.Td("{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(database.GetOrdersOfBot(pair))), recent_orders=helpers.pair_recent_orders(pair)), style={'color':'#a3a7b0'})]),
 

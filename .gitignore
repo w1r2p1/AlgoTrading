@@ -1,3 +1,5 @@
 AlgoTrading/historical_data/
 AlgoTrading/.idea/
 AlgoTrading/credentials
+AlgoTrading/__pycache__
+AlgoTrading/AlgoTrading.iml

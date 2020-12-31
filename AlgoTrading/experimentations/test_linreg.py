@@ -4,12 +4,14 @@ import pandas_ta as ta
 from Exchange     import Binance
 from decimal  import Decimal, getcontext
 import matplotlib.pyplot as plt
+import os
 
 
 class LinReg:
 
     def __init__(self, timeframe):
-        self.exchange  = Binance(filename='credentials.txt')
+
+        self.exchange  = Binance(filename=os.path.join(os.getcwd(), '..', 'credentials.txt'))
         self.timeframe = timeframe
         self.df        = pd.DataFrame()
 
@@ -22,8 +24,10 @@ class LinReg:
         max_ = 200
 
         # Get the dataframes from the csv files, keep only the time and close columns
-        df_hrs_ = pd.read_csv(f'historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]   # .iloc[min_:max_]
-        df_min_ = pd.read_csv(f'historical_data/{quote}/1m/{pair}_1m', sep='\t').loc[:,['time', 'close']]       # .iloc[min_:max_]
+        df_hrs_ = pd.read_csv(os.path.join(os.getcwd(), '..', f'historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}'), sep='\t').loc[:,['time', 'close']]   # .iloc[min_:max_]
+        df_min_ = pd.read_csv(os.path.join(os.getcwd(), '..', f'historical_data/{quote}/1m/{pair}_1m'), sep='\t').loc[:,['time', 'close']]       # .iloc[min_:max_]
+        # df_hrs_ = pd.read_csv(f'historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]   # .iloc[min_:max_]
+        # df_min_ = pd.read_csv(f'historical_data/{quote}/1m/{pair}_1m', sep='\t').loc[:,['time', 'close']]       # .iloc[min_:max_]
         # Rename the close columns to the pair's name
         df_hrs_.columns = ['time', pair+'_h']
         df_min_.columns = ['time', pair+'_m']
@@ -69,7 +73,7 @@ class LinReg:
         ax2 = ax1.twinx()
         ax1.plot(self.df.index, self.df.loc[:, pair+'_h'], color='blue', label='price')
         ax1.plot(self.df.index, self.df.loc[:, 'linreg_'+str(length)], color='green', label='linreg')
-        ax2.plot(self.df.index, self.df.loc[:, 'CFO_'+str(length)],       color='yellow')
+        ax2.plot(self.df.index, self.df.loc[:, 'CFO_'+str(length)],       color='yellow', label='cfo')
         ax1.set_title(f'LTCBTC   -   LinearRegression  -  {self.timeframe}    -    length={length}\n')
         ax1.set_ylabel(f'LTCBTC Price')
         ax2.tick_params(axis='y',  colors='red')
@@ -82,6 +86,6 @@ class LinReg:
 
 if __name__ == '__main__':
 
-    linear_regression = LinReg('2h')
+    linear_regression = LinReg('1h')
 
-    linear_regression.prepare_df('BTC', 'LTCBTC')
+    linear_regression.prepare_df('BTC', 'ETHBTC')

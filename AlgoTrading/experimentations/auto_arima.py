@@ -1,23 +1,7 @@
-from Exchange     import Binance
-from Indicators import *
+from backtesting.ZigZag import *
 
-from datetime  import datetime
 import sys
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import statsmodels.tsa.stattools as tsa
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-import pmdarima as pmd
-from pmdarima.model_selection import train_test_split
-import statsmodels.tsa.statespace.sarimax as sarimax
-from statsmodels.tsa.arima_model import ARIMA
-from pmdarima.datasets import load_wineind
-from pmdarima.datasets import load_msft
 from pmdarima.arima.utils import ndiffs
-from sklearn.metrics import mean_squared_error
-from pmdarima.metrics import smape
-from pmdarima.arima.stationarity import ADFTest     # Augmented Dickey-Fuller test to check if the time-series is stationnary
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 import os
@@ -289,5 +273,5 @@ class ArimaFit:
 if __name__ == "__main__":
     modelization = ArimaFit()
 
-    modelization.GenerateAndSaveModel(quote='BTC', pair='LTCBTC', timeframe='1h')
-    # modelization.PredictTestData_AndPlot(quote = 'BTC', pair = 'LTCBTC', nb_forecasts = 10)
+    # modelization.GenerateAndSaveModel(quote='BTC', pair='LTCBTC', timeframe='1h')
+    modelization.PredictTestData_AndPlot(quote = 'BTC', pair = 'LTCBTC', nb_forecasts = 10)

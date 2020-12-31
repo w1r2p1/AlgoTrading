@@ -1,12 +1,11 @@
 from Exchange   import Binance
 from Database   import BotDatabase
 # from Indicators import *
-import Indicators
+from backtesting import ZigZag
 
 from datetime import datetime
 from pathlib  import Path
 import numpy as np
-from tqdm import tqdm
 import pandas as pd
 
 
@@ -194,7 +193,7 @@ class Histories:
             # plt.show()
 
             """"""
-            Indicators.Add_ZigZag(df, min_perc_change=4)
+            ZigZag.Add_ZigZag(df, min_perc_change=4)
             # df.close.plot()
             # plt.scatter(df.index, df['buys'],  c='r')
             # plt.scatter(df.index, df['sells'],  c='g')

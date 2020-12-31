@@ -1,7 +1,6 @@
 import sqlite3
 from decimal import Decimal
 from datetime import datetime
-import pandas as pd
 
 
 class BotDatabase:
@@ -109,7 +108,7 @@ class BotDatabase:
 
 		values = tuple(param for param in bot_params.values())
 
-		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
+		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
 		conn.commit()
 
 
@@ -194,9 +193,6 @@ class BotDatabase:
 			ov = dict(c.fetchone())['bot_profit_minus_fees']
 			values = (str(Decimal(ov) + Decimal(kwargs['bot_profit_minus_fees'])), pair)
 			c.execute('UPDATE bots SET bot_profit_minus_fees = ? WHERE pair = ?', values)
-
-		if 'test_orders' in kwargs:
-			c.execute('UPDATE bots SET test_orders = ? WHERE pair = ?', (kwargs['test_orders'], pair))
 
 		conn.commit()
 
@@ -389,7 +385,7 @@ class BotDatabase:
 			return dict(balance)['internal_quote_balance']			# '2.50000000'
 
 
-	def GetProfit(self, quoteasset:str)->str:
+	def get_profit(self, quoteasset:str, real_or_internal:str)->str:
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
@@ -398,7 +394,7 @@ class BotDatabase:
 		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
 		balance = c.fetchone()
 
-		return dict(balance)['internal_profit']				# '2.50000000'
+		return dict(balance)[f'{real_or_internal}_profit']				# '2.50000000'
 
 
 	def GetQuoteFees(self, quoteasset:str)->str:

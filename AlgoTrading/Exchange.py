@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 import hashlib
 from decimal import Decimal
-# from math import gcd, ceil
 import math
 import win32api
 import re
@@ -317,13 +316,12 @@ class Binance:
 
 
 	def GetLastestPriceOfPair(self, pair:str)->str:
-		""" Gets the lastest price for a pair """
+		""" Gets the last price for a pair """
 
-		url  = self.base + self.endpoints["lastestPrice"] + '?&symbol=' + pair
-		data = self._get(url)
+		data = self._get(self.base + self.endpoints["lastestPrice"] + '?&symbol=' + pair)
 
 		if data.__contains__('code'):
-			return "In 'Exchange' : Could not get lastest price of " + pair + " from Binance."
+			return "In 'Exchange' : Could not get last price of " + pair + " from Binance."
 		else:
 			return data['price']		# "4.00000200"
 

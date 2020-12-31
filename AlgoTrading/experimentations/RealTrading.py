@@ -31,7 +31,7 @@ class RealTrading:
         self.exchange 		= exchange
         self.database 		= database
         self.skips          = 0
-        self.bot_token      = read_token_from_config_file("config.cfg")
+        self.bot_token      = read_token_from_config_file("telegram_config.cfg")
         self.bot_chatID     = '456212622'
 
 
@@ -119,7 +119,7 @@ class RealTrading:
                 # Additional mandatory parameters : price & quantity
                 buy_order_parameters['timeInForce'] = 'GTC'		 		                                                        # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
                 buy_order_parameters['price'] 	    = format(round(buy_price, bot['baseAssetPrecision']), 'f')
-                buy_order_parameters['quantity']    = format(round(quantity,   bot['baseAssetPrecision']), 'f')
+                buy_order_parameters['quantity']    = format(round(quantity,  bot['baseAssetPrecision']), 'f')
 
             # Simumlate a buy from exchange
             place_order_time = datetime.utcnow()

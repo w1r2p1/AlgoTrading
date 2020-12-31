@@ -1,20 +1,12 @@
-from Exchange     import Binance
-from Indicators import *
-from datetime  import datetime
+from backtesting.ZigZag import *
 # import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import statsmodels.tsa.stattools as tsa
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+from statsmodels.graphics.tsaplots import plot_acf
 import seaborn as sns
 import pandas_ta as ta
-from statsmodels.tsa.arima_model import ARIMA
-import statsmodels.api as sm
 from pmdarima.arima.utils import ndiffs
-from matplotlib import pyplot
-from sklearn.metrics import mean_squared_error
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-
 
 # exchange = Binance(filename='credentials.txt')
 # df = exchange.GetPairKlines(pair='LTCBTC', timeframe='1h', start_date=datetime(2020,6,1))[-200:]

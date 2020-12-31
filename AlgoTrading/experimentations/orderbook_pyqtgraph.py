@@ -14,8 +14,9 @@ from collections import deque
 # Parameters for the plot
 duration_between_refreshes = 100         # in milliseconds. 1000ms or 100ms
 depth  = 20
-maxlen = 200
+maxlen = 100
 
+# current_milli_time = lambda: int(round(time.time() * 1000))
 
 class TimeAxisItem(pg.AxisItem):
     # Class that holds the properties for a datetime axis (for the 2nd and 3rd plots)
@@ -57,7 +58,9 @@ class RealTimeOrderBook(QtGui.QMainWindow):
             sys.exit(1)
 
         # Top <levels> bids and asks, pushed every X milliseconds. Valid <levels> are 5, 10, or 20.
-        self.binance_websocket_api_manager.create_stream(channels     = f"depth{depth}@{duration_between_refreshes}ms",
+        self.binance_websocket_api_manager.create_stream(
+                                                         channels     = f"depth{depth}@{duration_between_refreshes}ms",
+                                                         # channels     = f"depth@{duration_between_refreshes}ms",
                                                          markets      = self.base + self.quote,
                                                          stream_label = f'depth{depth}',
                                                          output       = "UnicornFy",
@@ -113,6 +116,8 @@ class RealTimeOrderBook(QtGui.QMainWindow):
         self.third_plot.addLegend()
         self.midprice_plt = self.third_plot.plot([], name="Midprice")
         self.midprices = deque(maxlen=maxlen)
+        # self.midprices = deque([1], maxlen=maxlen)
+        self.midprices_pct = np.array([])
 
         # Updarte the graph every X ms
         self.timer.timeout.connect(self.fetch_new_data)
@@ -145,7 +150,8 @@ class RealTimeOrderBook(QtGui.QMainWindow):
                 self.orderbook_asks.setData(asks_prices, asks_quantities)
                 self.midprice_line.setValue(midprice)
                 max_range = max(max(bids_prices)-min(bids_prices), max(asks_prices)-min(asks_prices))
-                self.first_plot.setXRange(midprice - max_range*1.1, midprice + max_range*1.1, padding=0)
+                # self.first_plot.setXRange(midprice - max_range*1.1, midprice + max_range*1.1, padding=0)
+                self.first_plot.setXRange(midprice*0.999, midprice*1.001, padding=0)
                 self.first_plot.setYRange(0, 30, padding=0)
 
                 # Second plot : imbalance evolution ____________________________________________________________________________________
@@ -157,7 +163,10 @@ class RealTimeOrderBook(QtGui.QMainWindow):
                 # # Store the best bid and ask data
                 # weighted_bid_volumes.append(weighted_bid_volume)
                 # weighted_ask_volumes.append(weighted_ask_volume)
-                self.dates.append(oldest_stream_data_from_stream_buffer['last_update_id']/1000)
+
+                self.dates.append(time.time_ns() // 1000000)
+                # self.dates.append(oldest_stream_data_from_stream_buffer['last_update_id']/1000)
+                # self.dates.append(oldest_stream_data_from_stream_buffer['event_time']/1000)
                 self.imbalances.append(imbalance)
                 self.imbalance_plt.setData(x=list(self.dates), y=list(self.imbalances))
                 self.zeroline_imbalance.setValue(0) # Horizontal zeroline
@@ -165,6 +174,8 @@ class RealTimeOrderBook(QtGui.QMainWindow):
                 # Third plot : midprice evolution _____________________________________________________________________________________
                 self.midprices.append(midprice)
                 self.midprice_plt.setData(x=list(self.dates), y=list(self.midprices))
+                # self.midprices_pct = np.diff(self.midprices) / midprice * 100.
+                # self.midprice_plt.setData(x=list(self.dates)[1:], y=list(self.midprices_pct))
 
 
                 # Compute and display the fps in real time ____________________________________________________________________________
@@ -188,9 +199,24 @@ if __name__ == "__main__":
 
     # print(datetime.datetime.utcfromtimestamp(int(1556876873656/1000)))
     # print(datetime.datetime.utcfromtimestamp(123456785))
-    # print(datetime.datetime.utcfromtimestamp(2046077850))
+    # print(datetime.datetime.utcfromtimestamp(1499827319559//1000))
+    # print(datetime.datetime.utcfromtimestamp(2046077850//1000))
+    # timestamp = 1556876873656
+    # mytime = datetime.datetime.fromtimestamp(timestamp/1000).replace(microsecond = (timestamp % 1000) * 1000)
+    # print(mytime)
     #
-    # print(datetime.datetime(1970, 1, 1) + datetime.timedelta(milliseconds=2046077850//1000))
+    #
+    # milliseconds = 0
+    # if len(str(timestamp)) == 13:
+    #     milliseconds = int(str(timestamp)[-3:])
+    #     timestamp = float(str(timestamp)[0:-3])
+    #
+    # the_date = datetime.datetime.fromtimestamp(timestamp)
+    # the_date += datetime.timedelta(milliseconds=milliseconds)
+    # print(the_date)
+
+
+
 
     app = QtGui.QApplication(sys.argv)
     thisapp = RealTimeOrderBook()

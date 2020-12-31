@@ -24,7 +24,7 @@ from rtchange import Finder
 
 
 
-class Model_Selection:
+class ModelSelection:
 
     def __init__(self, quote, pair, timeframe, side, log):
         self.df = self.get_df(quote=quote, pair=pair, timeframe=timeframe, log=log)
@@ -33,7 +33,7 @@ class Model_Selection:
         self.side  = side
         self.timeframe = timeframe
         self.log   = log
-        self.histos_dict = self.histograms_from_CSV(file=f'histograms/{quote}/{timeframe}/{pair}_{timeframe}_{side}')
+        # self.histos_dict = self.histograms_from_CSV(file=f'histograms/{quote}/{timeframe}/{pair}_{timeframe}_{side}')
 
         self.momentum = dict(
             ao          = (5,20),
@@ -441,14 +441,15 @@ class Model_Selection:
                 return model_knn.fit(X, Y)
 
         # Save the model to disk
-        model_file = f'models/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}_model_{self.side}.sav'
-        pickle.dump(fit_model(), open(model_file, 'wb'))
+        # model_file = f'models/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}_model_{self.side}.sav'
+        # pickle.dump(fit_model(), open(model_file, 'wb'))
 
 
         # some time later... _______________________________________________________________________________________________________________________________________________________
 
         # load the model from disk
-        loaded_model = pickle.load(open(model_file, 'rb'))
+        # loaded_model = pickle.load(open(model_file, 'rb'))
+        loaded_model = fit_model()
 
         # Estimate the accuracy on the whole set
         df_pour_fit.loc[:,'predictions']      = loaded_model.predict(X)
@@ -456,7 +457,7 @@ class Model_Selection:
         # df_pour_fit.loc[:,'one_probability']  = loaded_model.predict_proba(X)[:,1]
         df_pour_fit.loc[:,'predictions_adjusted'] = np.where(df_pour_fit['predictions']==1, df_pour_fit['close'], np.nan)
         df_pour_fit.loc[:,'truth_adjusted']       = np.where(df_pour_fit[self.side]==1,     df_pour_fit['close'], np.nan)
-        print(df_pour_fit.loc[:,'truth_adjusted'].dropna())
+
         df_outofsample = df_probas.iloc[max_:]
         X_outpofsample = df_outofsample[list(df_outofsample.columns[7:])]
         Y_outpofsample = df_outofsample[self.side].astype(int)
@@ -713,7 +714,7 @@ if __name__ == '__main__':
 
     quote_     = 'BTC'
     pair_      = 'ETHBTC'
-    timeframe_ = '2h'
+    timeframe_ = '5m'
 
     # In the project directory, create a nested directory for the quoteasset if not exists
     Path('models/' + quote_).mkdir(parents=True, exist_ok=True)
@@ -728,6 +729,6 @@ if __name__ == '__main__':
         # for algo in ['LogisticRegression', 'RandomForest', 'DecisionTree', 'MLP', 'KNeighbors']:
         for algo in ['RandomForest']:
             print(algo)
-            model = Model_Selection(quote=quote_, pair=pair_, timeframe=timeframe_, side=side_, log=True)
-            # model.fit_save__and_evaluate_model(sklearn_model=algo)                     # ['LogisticRegression', 'RandomForest', 'DecisionTree', 'MLP', 'KNeighbors']
-            model.test_RTChange()
+            model = ModelSelection(quote=quote_, pair=pair_, timeframe=timeframe_, side=side_, log=True)
+            model.fit_save__and_evaluate_model(sklearn_model=algo)                     # ['LogisticRegression', 'RandomForest', 'DecisionTree', 'MLP', 'KNeighbors']
+            # model.test_RTChange()

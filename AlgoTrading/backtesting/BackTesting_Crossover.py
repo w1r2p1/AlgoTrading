@@ -1,19 +1,12 @@
-import Strategies
 from Exchange     import Binance
-
-from decimal  import Decimal, getcontext
-import plotly.graph_objs as go
+from decimal  import Decimal
 import pandas as pd
-from plotly.subplots import make_subplots
 import numpy as np
 import matplotlib.pyplot as plt
-import statsmodels.tsa.stattools as tsa
-import statsmodels.api as sm
 from tqdm import tqdm
 from empyrical import sortino_ratio, calmar_ratio, omega_ratio, sharpe_ratio
 import pandas_ta as ta
-import math
-from supersmoother import SuperSmoother, LinearSmoother
+
 
 class BackTesting:
 
@@ -304,7 +297,7 @@ if __name__ == '__main__':
 
 	# Find the best lengths for this timeframe
 	for length_fast_ in np.linspace(start=5, stop=20, num=4):
-		for length_slow_ in np.linspace(start=20, stop=60, num=5):
+		for length_slow_ in np.linspace(start=20, stop=50, num=4):
 			for stop_loss_pct_ in np.linspace(start=2, stop=4, num=3):
 				quote_profits_, _ = backtester.backtest(quote   		  = 'BTC',
 													    pair      		  = 'ETHBTC',

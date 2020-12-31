@@ -1,10 +1,8 @@
 from Exchange import Binance
 from Database import BotDatabase
-from HistoricalPrices import indicators_list
-from BackTesting import BackTesting
+from backtesting.BackTesting import BackTesting
 import Settings
 # from Strategies import *
-import Strategies
 
 import dash
 import dash_core_components as dcc
@@ -13,7 +11,6 @@ import dash_html_components as html
 from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
-import numpy as np
 import os
 from os import listdir
 from os.path import isfile, join

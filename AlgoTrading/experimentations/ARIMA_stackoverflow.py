@@ -1,24 +1,6 @@
-from Exchange     import Binance
-from Indicators import *
-
-from datetime  import datetime
 import sys
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import statsmodels.tsa.stattools as tsa
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-import pmdarima as pmd
-from pmdarima.model_selection import train_test_split
-import statsmodels.tsa.statespace.sarimax as sarimax
-from pmdarima.datasets import load_wineind
-from pmdarima.datasets import load_msft
 from pmdarima.arima.utils import ndiffs
-from sklearn.metrics import mean_squared_error
-from pmdarima.metrics import smape
-from pmdarima.arima.stationarity import ADFTest     # Augmented Dickey-Fuller test to check if the time-series is stationnary
 import plotly.graph_objs as go
-from plotly.subplots import make_subplots
 import os
 from os import listdir
 from os.path import isfile, join

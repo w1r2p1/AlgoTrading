@@ -1,5 +1,4 @@
-import Strategies
-from Exchange     import Binance
+from Exchange import Binance
 
 from decimal  import Decimal, getcontext
 import plotly.graph_objs as go
@@ -18,7 +17,7 @@ from supersmoother import SuperSmoother, LinearSmoother
 class BackTesting:
 
 	def __init__(self, timeframe):
-		self.exchange  = Binance(filename='credentials.txt')
+		self.exchange  = Binance(filename='../assets/credentials.txt')
 		self.timeframe = timeframe
 		self.df        = pd.DataFrame()
 
@@ -31,8 +30,8 @@ class BackTesting:
 		# max_ = 1700
 
 		# Get the dataframes from the csv files, keep only the time and close columns
-		df_hrs_ = pd.read_csv(f'historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]
-		df_min_ = pd.read_csv(f'historical_data/{quote}/1m/{pair}_1m', sep='\t').loc[:,['time', 'close']]
+		df_hrs_ = pd.read_csv(f'../historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]
+		df_min_ = pd.read_csv(f'../historical_data/{quote}/1m/{pair}_1m', sep='\t').loc[:,['time', 'close']]
 		# Rename the close columns to the pair's name
 		df_hrs_.columns = ['time', pair+'_h']
 		df_min_.columns = ['time', pair+'_m']

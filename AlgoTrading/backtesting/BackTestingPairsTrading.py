@@ -1,5 +1,4 @@
-import Strategies
-from Exchange     import Binance
+from Exchange import Binance
 
 from decimal  import Decimal, getcontext
 import plotly.graph_objs as go
@@ -28,11 +27,11 @@ from sklearn.linear_model import LinearRegression
 # ax2.scatter(finaldf.index[:100], finaldf['long_signal_on_spread'].iloc[:100])
 # plt.show()
 
-class BackTesting_PairsTrading:
+class BackTestingPairsTrading:
 	""" Class used in 'BotDeMoi' to backtest a strategy. """
 
-	def __init__(self, exchange, timeframe):
-		self.exchange  = exchange
+	def __init__(self, timeframe):
+		self.exchange  = Binance(filename='../assets/credentials.txt')
 		self.timeframe = timeframe
 		self.df        = pd.DataFrame()
 
@@ -45,10 +44,10 @@ class BackTesting_PairsTrading:
 		# max_ = 10000
 
 		# Get the dataframes from the csv files, keep only the time and close columns
-		df_pair0_hrs = pd.read_csv(f'historical_data/{quote}/{self.timeframe}/{pairs[0]}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]
-		df_pair1_hrs = pd.read_csv(f'historical_data/{quote}/{self.timeframe}/{pairs[1]}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]
-		df_pair0_min = pd.read_csv(f'historical_data/{quote}/1m/{pairs[0]}_1m', sep='\t').loc[:,['time', 'close']]
-		df_pair1_min = pd.read_csv(f'historical_data/{quote}/1m/{pairs[1]}_1m', sep='\t').loc[:,['time', 'close']]
+		df_pair0_hrs = pd.read_csv(f'../historical_data/{quote}/{self.timeframe}/{pairs[0]}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]
+		df_pair1_hrs = pd.read_csv(f'../historical_data/{quote}/{self.timeframe}/{pairs[1]}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]
+		df_pair0_min = pd.read_csv(f'../historical_data/{quote}/1m/{pairs[0]}_1m', sep='\t').loc[:,['time', 'close']]
+		df_pair1_min = pd.read_csv(f'../historical_data/{quote}/1m/{pairs[1]}_1m', sep='\t').loc[:,['time', 'close']]
 		# Rename the close columns to the pair's name
 		df_pair0_hrs.columns = ['time', pairs[0]+'_h']
 		df_pair1_hrs.columns = ['time', pairs[1]+'_h']
@@ -416,11 +415,7 @@ class BackTesting_PairsTrading:
 
 if __name__ == '__main__':
 
-	exchange_  = Binance(filename='credentials.txt')
-	backtester = BackTesting_PairsTrading(exchange=exchange_, timeframe='1D')
-
-	# backtester.prepare_df(quote     = 'BTC',
-	# 					  pairs     = ['ETHBTC', 'XRPBTC'],)
+	backtester = BackTestingPairsTrading('1D')
 
 	backtester.backtest(quote     = 'BTC',
 						pairs     = ['ETCBTC', 'XRPBTC'],

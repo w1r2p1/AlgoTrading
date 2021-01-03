@@ -448,7 +448,7 @@ Variance  (VAR_{length})
         """ Gets the historic data from the csv file """
 
         # # Work on historical data from the csv file
-        historical_data_file = f'historical_data/{quote}/{timeframe}/{pair}_{timeframe}'
+        historical_data_file = f'../historical_data/{quote}/{timeframe}/{pair}_{timeframe}'
         dataframe_ = pd.read_csv(historical_data_file, sep='\t')
 
         # del dataframe_['time']
@@ -602,7 +602,7 @@ if __name__ == "__main__":
 
     # In the project directory, create a nested directory for the quoteasset if not exists
     Path('histograms/' + quote_).mkdir(parents=True, exist_ok=True)
-    Path('historical_data_with_inds/' + quote_).mkdir(parents=True, exist_ok=True)
+    # Path('historical_data_with_inds/' + quote_).mkdir(parents=True, exist_ok=True)
 
     # Common name for the csv files that will contain the buy & sell histograms
     histos_file = f'histograms/{quote_}/{timeframe_}/{pair_}_{timeframe_}'

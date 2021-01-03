@@ -13,9 +13,9 @@ class Histories:
     """ Class to get, update and store the historical prices of all the pairs on Binance. """
 
     def __init__(self):
-        self.database  = BotDatabase("database.db")
-        self.exchange  = Binance(filename='credentials.txt')
-        self.timeframe = '5m'
+        self.database  = BotDatabase("../assets/database.db")
+        self.exchange  = Binance(filename='../assets/credentials.txt')
+        self.timeframe = '1m'
         self.ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()]))             # ['ETH', 'BTC']
 
 
@@ -79,7 +79,7 @@ class Histories:
             print(f"Retrieved {len(df)} candles for {pair}.")
 
             # csv file name, in the corresponding quote folder.
-            filename = f'historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}'
+            filename = f'../historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}'
 
             """ _____________________________________________________________________________ """
             """ Work on the close prices """

@@ -641,7 +641,7 @@ class ModelSelection:
         """ Gets the historic data from the csv file """
 
         # # Work on historical data from the csv file
-        historical_data_file = f'historical_data/{quote}/{timeframe}/{pair}_{timeframe}'
+        historical_data_file = f'../historical_data/{quote}/{timeframe}/{pair}_{timeframe}'
         dataframe_ = pd.read_csv(historical_data_file, sep='\t')
 
         # del dataframe_['time']
@@ -717,8 +717,8 @@ if __name__ == '__main__':
     timeframe_ = '5m'
 
     # In the project directory, create a nested directory for the quoteasset if not exists
-    Path('models/' + quote_).mkdir(parents=True, exist_ok=True)
-    Path('probas/' + quote_).mkdir(parents=True, exist_ok=True)
+    # Path('models/' + quote_).mkdir(parents=True, exist_ok=True)
+    # Path('probas/' + quote_).mkdir(parents=True, exist_ok=True)
 
     print("_________ " + pair_ + " _________")
 

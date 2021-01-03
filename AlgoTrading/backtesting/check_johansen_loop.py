@@ -105,5 +105,5 @@ if __name__ == '__main__':
     print('\ncointegrated_pairs = \n', df)
 
     df.sort_values(by=['asset_1', 'asset_2'], inplace=True)
-    df.to_csv("cointegrated_BTC_pairs_1d.csv", sep='\t', index=False)
+    # df.to_csv("cointegrated_BTC_pairs_1d.csv", sep='\t', index=False)
 

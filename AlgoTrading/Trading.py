@@ -19,9 +19,9 @@ from   decimal import Decimal
 import re
 import os
 
-# Clear file database.db
-with open('assets/database.db', "w"):
-    pass
+# # Clear file database.db
+# with open('assets/database.db', "w"):
+#     pass
 
 class Strategy:
 

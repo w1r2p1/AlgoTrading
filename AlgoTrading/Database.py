@@ -40,7 +40,8 @@ class BotDatabase:
 			quoteAssetPrecision  	int,
             baseAssetPrecision   	int,
             quotePrecision      	int,
-            BNB_precision			int
+            BNB_precision			int,
+            MinNotional				text
 			)''')
 
 		c.execute('''CREATE TABLE IF NOT EXISTS orders (
@@ -90,7 +91,7 @@ class BotDatabase:
 
 		values = tuple(param for param in bot_params.values())
 
-		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
+		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
 		conn.commit()
 
 

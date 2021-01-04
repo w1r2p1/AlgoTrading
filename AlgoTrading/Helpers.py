@@ -37,14 +37,21 @@ class HelperMethods:
         for order in list(database.get_quote_orders(quoteasset=quote)):
             if dict(order)['side'] == 'SELL':
                 lst = dict(order)['hold_duration'].split(":")
-                print(lst)
+
+                # Look for milliseconds
+                milliseconds = 0
+                split_milli = lst[2].split('.')
+                if len(split_milli)==2:
+                    milliseconds = split_milli[1]
+
+                # Create a list of timedeltas
                 if len(lst[0])<=2:
-                    hold_durations.append(timedelta(hours=int(lst[0]), minutes=int(lst[1]), seconds=int(lst[2])))
+                    hold_durations.append(timedelta(hours=int(lst[0]), minutes=int(lst[1]), seconds=int(lst[2]), milliseconds=milliseconds))
                 else:
                     temp  = lst[0].split(" ")
                     days  = temp[0]
                     hours = temp[-1]
-                    hold_durations.append(timedelta(days=int(days), hours=int(hours), minutes=int(lst[1]), seconds=int(lst[2])))
+                    hold_durations.append(timedelta(days=int(days), hours=int(hours), minutes=int(lst[1]), seconds=int(lst[2]), milliseconds=milliseconds))
 
         # for item in hold_durations:
         #     print(item)

@@ -249,7 +249,7 @@ class Binance:
 			candles = candles+1
 
 		candles = math.ceil(candles)						# Round the number upward to its nearest integer
-		# print("Retrieving " + str(candles) + " candles.")
+		# print(f"Retrieving {candles} candles.")
 
 		if candles < 1000:
 			initial_candles = candles

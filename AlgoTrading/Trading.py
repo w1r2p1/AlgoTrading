@@ -19,9 +19,11 @@ from   decimal import Decimal
 import re
 import os
 
+# --------------------------------------
 # # Clear file database.db
 # with open('assets/database.db', "w"):
 #     pass
+# --------------------------------------
 
 class Strategy:
 
@@ -56,17 +58,15 @@ class Strategy:
 
 
 exchange = Binance(filename='assets/credentials.txt')
-# database = BotDatabase(name="/assets/database.db")
-database = BotDatabase(name=os.path.join(os.getcwd(), 'assets', 'database.db'))             # name =  'C:\Users\grego\Documents\GitHub\AlgoTrading\AlgoTrading\assets\database.db'
-# database = BotDatabase(name=f"r{os.path.join(os.getcwd(), 'assets', 'database.db')}")       # name = r'C:\Users\grego\Documents\GitHub\AlgoTrading\AlgoTrading\assets\database.db'
-
+database = BotDatabase(name="assets/database.db")
 strategy = Strategy(name='SSF_Crossover')
 
 
 class Trading:
 
-    def __init__(self, paper_trading:bool=True):
+    def __init__(self, paper_trading:bool=True, send_to_telegram:bool=False):
         self.paper_trading = paper_trading
+        self.send_to_telegram = send_to_telegram
 
         # List of all the quoteassets present in the database
         self.existing_quoteassets = list(set([dict(bot)['quoteasset'] for bot in database.GetAllBots()]))             # ['ETH', 'BTC']
@@ -114,7 +114,8 @@ class Trading:
                                quoteAssetPrecision   = int(pair_info['quoteAssetPrecision']),
                                baseAssetPrecision    = int(pair_info['baseAssetPrecision']),
                                quotePrecision        = int(pair_info['quotePrecision']),
-                               BNB_precision         = int(BNB_info['baseAssetPrecision']),)
+                               BNB_precision         = int(BNB_info['baseAssetPrecision']),
+                               MinNotional           = exchange.GetMinNotional(pair_),)
 
                     database.SaveBot(bot)			# Each row of the table 'bots' is made of the values of 'bot'.
 
@@ -157,7 +158,7 @@ class Trading:
 
         colorama.init()
         print("\n_______________________________________________________________________________________________")
-        print(colorama.Fore.GREEN + f"PAPER TRADING IS LIVE.\nTimeframe : {timeframe}.\n")
+        print(colorama.Fore.GREEN + f"{'PAPER' if self.paper_trading else ''} TRADING IS LIVE.\nTimeframe : {timeframe}.\n")
 
         while True:
 
@@ -192,14 +193,18 @@ class Trading:
     def buy_order(self, bot:dict, dict_to_fill:dict):
         """ The bot looks for a buy signal. If yes, places an order. """
 
+        candles    = 200
         pair 	   = bot['pair']
-        sp         = yaspin()
-        sp.color   = 'red'
-        sp.text    = "\tChecking for buy signals on " + pair + ", timeframe " + bot['timeframe'] + "."
-        df         = exchange.GetPairKlines(pair=pair, timeframe=bot['timeframe'], candles=200)				                    # get dataframe
+        df         = exchange.GetPairKlines(pair=pair, timeframe=bot['timeframe'], candles=candles)				                    # get dataframe
 
         if df.empty:
             return None
+
+        # Sometimes the candle is available late, so check again while we still get the last candle
+        now = datetime.utcnow()
+        now_arrondi_a_minute = datetime(now.year, now.month, now.day, now.hour, now.minute, 0)
+        while datetime.strptime(str(df.loc[df.index[-1], 'time']), "%Y-%m-%d %H:%M:%S") != now_arrondi_a_minute:
+            df = exchange.GetPairKlines(pair, bot['timeframe'], candles=candles)
 
         # signal = strategy.find_signal(df=df)		# check for a signal (returns 'buy'/'sell')
         signal = random.choice(['buy', 'sell'])
@@ -229,7 +234,8 @@ class Trading:
                 buy_order_parameters['quantity']    = format(round(quantity,  bot['baseAssetPrecision']), 'f')
 
             # Place a buy order
-            place_order_time = datetime.utcnow()
+            # place_order_time = datetime.utcnow()
+            place_order_time = datetime.utcfromtimestamp(exchange.GetServerTime()/1000)
             buy_order_result = exchange.PlaceOrder(order_params=buy_order_parameters, test_order=self.paper_trading)
 
             if self.paper_trading:
@@ -256,14 +262,15 @@ class Trading:
                 return None
 
             else:
-                text = "\t{time} - Success in placing a buy {test} order on {pair} \t: bought {quantity} {base} \tat {price} {quoteasset} for {quoteQty} {quoteasset}.".format(time       = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                                                                                                                                                               test       = 'test' if self.paper_trading else '',
-                                                                                                                                                                               pair       = pair,
-                                                                                                                                                                               quantity   = buy_order_result['executedQty'],
-                                                                                                                                                                               base       = pair.replace(bot['quoteasset'], ''),
-                                                                                                                                                                               price      = buy_price,
-                                                                                                                                                                               quoteasset = bot['quoteasset'],
-                                                                                                                                                                               quoteQty   = buy_order_result['cummulativeQuoteQty'])
+                text = "\t{time} - Success in placing a buy  {test} order on {pair:<8}  :  bought {quantity:<15} {base:<5} at {price:<11} {quoteasset} for {quoteQty:<9} {quoteasset}.".format(time       = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                                                                                                                                                                                test       = 'test' if self.paper_trading else '',
+                                                                                                                                                                                                pair       = pair,
+                                                                                                                                                                                                quantity   = buy_order_result['executedQty'],
+                                                                                                                                                                                                base       = pair.replace(bot['quoteasset'], ''),
+                                                                                                                                                                                                price      = buy_price,
+                                                                                                                                                                                                quoteasset = bot['quoteasset'],
+                                                                                                                                                                                                quoteQty   = buy_order_result['cummulativeQuoteQty'])
+
                 print(text)
 
                 # Compute the time taken to fill the order
@@ -307,7 +314,8 @@ class Trading:
 
 
                 # Send a text to telegram
-                # self.send_text_to_telegram(text)
+                if self.send_to_telegram:
+                    self.send_text_to_telegram(text)
 
                 dict_to_fill[pair] = [datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
                                       Decimal(buy_order_result['price']).normalize(),
@@ -324,14 +332,18 @@ class Trading:
         """ The bot successfully placed a buy order and is now look for a sell signal.
             If it finds one, places a sell order. """
 
+        candles     = 200
         pair 	    = bot['pair']
-        sp          = yaspin()
-        sp.color    = 'red'
-        sp.text     = "\tChecking for sell signals on " + pair + "."
-        df    	    = exchange.GetPairKlines(pair, bot['timeframe'], candles=200)
+        df    	    = exchange.GetPairKlines(pair, bot['timeframe'], candles=candles)
 
         if df.empty:
             return None
+
+        # Sometimes the candle is available late, so check again while we still get the last candle
+        now = datetime.utcnow()
+        now_arrondi_a_minute = datetime(now.year, now.month, now.day, now.hour, now.minute, 0)
+        while datetime.strptime(str(df.loc[df.index[-1], 'time']), "%Y-%m-%d %H:%M:%S") != now_arrondi_a_minute:
+            df = exchange.GetPairKlines(pair, bot['timeframe'], candles=candles)
 
         # signal = strategy.find_signal(df=df)		# check for a signal (returns 'buy'/'sell')
         signal = random.choice(['buy', 'sell'])
@@ -364,7 +376,8 @@ class Trading:
                 sell_order_parameters['quantity']    = format(round(quantity,   bot['baseAssetPrecision']), 'f')
 
             # Simulate a sell order
-            place_order_time  = datetime.utcnow()
+            # place_order_time  = datetime.utcnow()
+            place_order_time = datetime.utcfromtimestamp(exchange.GetServerTime()/1000)
             sell_order_result = exchange.PlaceOrder(order_params=sell_order_parameters, test_order=self.paper_trading)
 
             if self.paper_trading:
@@ -400,19 +413,20 @@ class Trading:
                 BNB_fee           = quote_fee / Decimal(exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
 
                 # How long we have been holding the asset for
-                hold_timedelta = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000) - datetime.strptime(dict(database.GetBot(pair=pair))['last_order_date'], "%Y-%m-%d %H:%M:%S")
+                hold_timedelta = datetime.utcfromtimestamp(int(int(sell_order_result['transactTime'])/1000)) - datetime.strptime(dict(database.GetBot(pair=pair))['last_order_date'], "%Y-%m-%d %H:%M:%S")
 
-                text = "\t{time} - Success in placing a sell {test} order on {pair} \t : sold {quantity} {base} at {price} {quoteasset} for {quoteQty} {quoteasset}. \t Profit : {profit} {quoteasset}".format(time       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                                                                                                                                                                                               test       = 'test' if self.paper_trading else '',
-                                                                                                                                                                                                               pair       = pair,
-                                                                                                                                                                                                               quantity   = sell_order_result['executedQty'],
-                                                                                                                                                                                                               base       = pair.replace(bot['quoteasset'], ''),
-                                                                                                                                                                                                               price      = sell_price,
-                                                                                                                                                                                                               quoteasset = bot['quoteasset'],
-                                                                                                                                                                                                               quoteQty   = sell_order_result['cummulativeQuoteQty'],
-                                                                                                                                                                                                               profit     = profit)
+                text = "\t{time} - Success in placing a sell {test} order on {pair:<8}  :  sold {quantity:<15} {base:<5} at {price:<10} {quoteasset} for {quoteQty:<9} {quoteasset}. \tProfit : {profit} {quoteasset}".format(time       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                                                                                                                                                                                                             test       = 'test' if self.paper_trading else '',
+                                                                                                                                                                                                                             pair       = pair,
+                                                                                                                                                                                                                             quantity   = sell_order_result['executedQty'],
+                                                                                                                                                                                                                             base       = pair.replace(bot['quoteasset'], ''),
+                                                                                                                                                                                                                             price      = sell_price,
+                                                                                                                                                                                                                             quoteasset = bot['quoteasset'],
+                                                                                                                                                                                                                             quoteQty   = sell_order_result['cummulativeQuoteQty'],
+                                                                                                                                                                                                                             profit     = profit)
                 print(text)
-
+                # print(hold_timedelta)
+                # print(timedelta_to_fill)
                 database.SaveOrder(quoteasset        = bot['quoteasset'],
                                    order_result      = sell_order_result,
                                    hold_duration     = str(hold_timedelta),
@@ -451,7 +465,8 @@ class Trading:
                                               BNB_Precision              = bot['BNB_precision'])
 
                 # Send a text to telegram
-                # self.send_text_to_telegram(text)
+                if self.send_to_telegram:
+                    self.send_text_to_telegram(text)
 
                 dict_to_fill[pair] = [datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
                                       Decimal(sell_order_result['price']).normalize(),
@@ -484,7 +499,7 @@ class Trading:
         account_balance = dict()
 
         for quoteasset in self.existing_quoteassets:
-            sp.text = "Processing " + quoteasset + " pairs..."
+            sp.text = f"Processing {quoteasset} pairs..."
             sp.start()
 
             account_balance[quoteasset] = Decimal(database.GetAccountBalance(quoteasset=quoteasset, real_or_internal='internal'))
@@ -492,13 +507,13 @@ class Trading:
             # If we have room for more bots
             if len(open_positions[quoteasset]) < BotsPerQuoteAsset:
                 # Find the best X pairs by volume
-                sorted_pairs[quoteasset] = self.sort_by_daily_volume(quoteasset=quoteasset)                                                                                      # best_pairs = {'ETH' : ['HOTETH', 'DENTETH', 'NPXSETH', 'NCASHETH', 'KEYETH', 'ZILETH', 'TRXETH', 'SCETH', 'MFTETH', 'VETETH'],
-                # Set the pairs to trade on for each quoteasset : the holding pairs, completed with the best pairs per volume if needed.                                    #               'BTC' : ['HOTBTC', 'VETBTC', 'ZILBTC', 'MBLBTC', 'MATICBTC', 'FTMBTC', 'TRXBTC', 'IOSTBTC', 'DOGEBTC', 'SCBTC']}
+                sorted_pairs[quoteasset] = self.sort_by_daily_volume(quoteasset=quoteasset)                                                                                     # best_pairs = {'ETH' : ['HOTETH', 'DENTETH', 'NPXSETH', 'NCASHETH', 'KEYETH', 'ZILETH', 'TRXETH', 'SCETH', 'MFTETH', 'VETETH'],
+                # Set the pairs to trade on for each quoteasset : the holding pairs, completed with the best pairs per volume if needed.                                        #               'BTC' : ['HOTBTC', 'VETBTC', 'ZILBTC', 'MBLBTC', 'MATICBTC', 'FTMBTC', 'TRXBTC', 'IOSTBTC', 'DOGEBTC', 'SCBTC']}
                 # Do not trade on the quoteassets and BNB, to avoid balances problems.
                 filtered = (k for k in sorted_pairs[quoteasset] if k not in open_positions[quoteasset] if not k.startswith(tuple([q for q in self.existing_quoteassets])) if not k.startswith('BNB'))
                 trading_pairs[quoteasset] = open_positions[quoteasset] + list(islice(filtered, BotsPerQuoteAsset-len(open_positions[quoteasset])))
 
-                min_amount = sum(Decimal(exchange.GetMinNotional(pair)) for pair in trading_pairs[quoteasset] if pair not in open_positions[quoteasset])
+                min_amount = sum(Decimal(dict(database.GetBot(pair))['MinNotional']) for pair in trading_pairs[quoteasset] if pair not in open_positions[quoteasset])
                 # holding[quoteasset] = sum(Decimal(dict(bot)['quoteBalance']) for bot in database.GetAllBots() if dict(bot)['quoteasset']==quoteasset and dict(bot)['quoteBalance'] != '')           # How much bots are holding atm on this quoteasset.
 
                 sp.stop()
@@ -543,52 +558,63 @@ class Trading:
 
         parsed_timeframe = re.findall(r'[A-Za-z]+|\d+', timeframe)      # Separates '30m' in ['30', 'm']
         next_candle = None
+        after_next_candle = None
         now = datetime.now()
 
         # Find the time of the next candle
         if parsed_timeframe[1] == 'm':
-            if now.minute < 60-int(parsed_timeframe[0]):
-                min_till_candle = int(parsed_timeframe[0])-(now.minute % int(parsed_timeframe[0]))
-                next_candle     = datetime(now.year, now.month, now.day, now.hour, now.minute + min_till_candle, 0)
-                sp.text = "Waiting for the next " + timeframe + " candle (at " + next_candle.strftime("%H:%M") + ") to start trading."
+            if int(parsed_timeframe[0]) == 1:
+                next_candle = datetime(now.year, now.month, now.day, now.hour, now.minute+1, 0)
             else:
-                next_candle = datetime(now.year, now.month, now.day, now.hour+1, 0, 0)
-                sp.text = "Waiting for the next " + timeframe + " candle (at " + next_candle.strftime("%H:%M") + ") to start trading."
+                if now.minute < 60-int(parsed_timeframe[0]):
+                    min_till_candle = int(parsed_timeframe[0])-(now.minute % int(parsed_timeframe[0]))
+                    next_candle     = datetime(now.year, now.month, now.day, now.hour, now.minute+min_till_candle, 0)
+                else:
+                    next_candle = datetime(now.year, now.month, now.day, now.hour+1, 0, 0)
+            after_next_candle = next_candle + timedelta(minutes=int(parsed_timeframe[0]))
 
         elif parsed_timeframe[1] == 'h':
             next_candle = datetime(now.year, now.month, now.day, now.hour+int(parsed_timeframe[0]), 0, 0)
-            sp.text = "Waiting for the next " + timeframe + " candle (at " + next_candle.strftime("%H:%M") + ") to start trading."
+            after_next_candle = next_candle + timedelta(hours=int(parsed_timeframe[0]))
 
+        sp.text = f'Waiting for the next {timeframe} candle (at {next_candle.strftime("%H:%M")}) to start trading.'
+
+        wait_till_after_next = False
+        estimated_duration_to_set_the_pairs = 55 # seconds
         # Update the pairs just before the candle arrives
-        if now < next_candle-timedelta(seconds=50):
-            pause.until(next_candle-timedelta(seconds=50))
+        if now < next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs):
+            # If we have more than 57 seconds before the candle, then wait
+            pause.until(next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs))
         else:
-            sp.text = "Arrived too late for the first candle. Waiting for the next one."
-            pause.until(next_candle)        # Cas de la toute premiere candle : on ne fait rien si on arrive moins de 50 secondes avant, on attend la candle suivante.
+            # If we arrive less than 57 seconds before the candle, we don't have time to process the pairs.
+            sp.text = f'Too late for the candle at {next_candle.strftime("%H:%M")}. Waiting for the next one (at {after_next_candle.strftime("%H:%M")}).'
+            pause.until(after_next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs))        # Cas de la toute premiere candle : on ne fait rien si on arrive moins de 50 secondes avant, on attend la candle suivante.
+            wait_till_after_next = True
 
         sp.stop()
         sp.hide()
 
         print("_______________________________________")
-        print(colorama.Fore.GREEN + "Candle : " + str(next_candle.strftime("%Y-%m-%d %H:%M")) + " (local time).")
-        self.set_pairs_to_trade_on()          # Takes ~40secs to run
+        print(colorama.Fore.GREEN + f'Candle : {next_candle.strftime("%Y-%m-%d %H:%M") if not wait_till_after_next else after_next_candle.strftime("%Y-%m-%d %H:%M")} (local time).')
+        self.set_pairs_to_trade_on()          # Takes ~50secs to run
 
         sp.start()
         sp.show()
         sp.text = "Candle is coming..."
         # If time left, pause until the candle arrives
-        pause.until(next_candle-timedelta(seconds=5))
+        pause.until(next_candle-timedelta(seconds=1) if not wait_till_after_next else after_next_candle-timedelta(seconds=1))
         sp.stop()
         sp.hide()
+        pause.until(next_candle if not wait_till_after_next else after_next_candle)
 
-        # Display counter for the last 5 secs
-        for remaining in range(5, 0, -1):
-            sys.stdout.write("\r")
-            sys.stdout.write("Candle is coming in {:2d} seconds...".format(remaining))
-            sys.stdout.flush()
-            time.sleep(1)
-        # print('\r')
-        sys.stdout.write("\r")          # Erase the last line
+        # # Display counter for the last 5 secs
+        # for remaining in range(5, 0, -1):
+        #     sys.stdout.write("\r")
+        #     sys.stdout.write("Candle is coming in {:2d} seconds...".format(remaining))
+        #     sys.stdout.flush()
+        #     time.sleep(1)
+        # # print('\r')
+        # sys.stdout.write("\r")          # Erase the last line
 
         return False
 
@@ -615,20 +641,23 @@ class Trading:
 
         stats = dict()
 
-        def GetVolume(pair:str):
-            pair_info = exchange.GetMetadataOfPair(pair)
+        def GetVolume(pair_:str):
+            pair_info = exchange.GetMetadataOfPair(pair_)
 
             if pair_info == {}:
-                print(f"Could not get {pair} info from Binance to get its volume.")
+                print(f"Could not get {pair_} info from Binance to get its volume.")
 
             elif pair_info and pair_info['status'] == 'TRADING':
-                stats[pair] = Decimal(exchange.Get24hrTicker(pair)['quoteVolume'])
+                stats[pair_] = Decimal(exchange.Get24hrTicker(pair_)['quoteVolume'])
 
         pool  = Pool()
         func1 = partial(GetVolume)
         pool.map(func1, pairs[quoteasset])
         pool.close()
         pool.join()
+
+        # for pair in pairs[quoteasset]:
+        #     GetVolume(pair)
 
         sorted_volumes  = {k: v for k, v in sorted(stats.items(), key=lambda item: item[1], reverse=True)}
         sorted_pairs_list = list(sorted_volumes.keys())
@@ -646,8 +675,6 @@ class Trading:
 
 if __name__ == "__main__":
 
-
-
     # Parameters
     timeframe         = '1m'
     WantedQuoteAssets = ['BTC', 'ETH']
@@ -657,4 +684,4 @@ if __name__ == "__main__":
     # database.DeleteBots(quoteasset='')
 
     # Start trading
-    Trading(paper_trading=True).main_loop()
+    Trading(paper_trading=True, send_to_telegram=False).main_loop()

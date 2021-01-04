@@ -6,6 +6,7 @@ import pandas as pd
 from plotly.subplots import make_subplots
 import numpy as np
 import matplotlib.pyplot as plt
+import mplfinance as mpf
 import statsmodels.tsa.stattools as tsa
 import statsmodels.api as sm
 from tqdm import tqdm
@@ -27,7 +28,7 @@ class BackTesting:
 		min_ = 0
 		# min_ = 6000
 		max_ = None
-		# max_ = 1700
+		# max_ = 3000
 
 		# Get the dataframes from the csv files, keep only the time and close columns
 		df_hrs_ = pd.read_csv(f'../historical_data/{quote}/{self.timeframe}/{pair}_{self.timeframe}', sep='\t').loc[:,['time', 'open', 'high', 'low', 'close']]
@@ -56,7 +57,7 @@ class BackTesting:
 
 		# If the two coins don't have enough overlapping, skip the pair.
 		if len(self.df.dropna()) < 800:
-			print(f'{pair} - Less than 1000 ({len(self.df.dropna())}) matching indexes, skipping the pair.')
+			print(f'{pair} - Less than 800 ({len(self.df.dropna())}) matching indexes, skipping the pair.')
 			return
 
 		# To simplify the code, shift the next minute data 1 place backwards so that the indice of the next minute candle matches the hours' one that gives the signal.
@@ -66,6 +67,10 @@ class BackTesting:
 
 		# Drop all the non-necessary minute data : since we shifted, drop averythime at non hours indexes, where hours data is at NaN
 		self.df.dropna(inplace=True)
+
+		# # Display the df
+		# with pd.option_context('display.max_rows', 10, 'display.max_columns', None):
+		# 	print(self.df)
 
 		print('Data is ready.')
 
@@ -80,10 +85,8 @@ class BackTesting:
 
 		indic_name = f'{indic}_{indic_length}'
 
-		# Compute the spread, the bbands and the indic
+		# Compute the indic
 		getattr(self.df.ta, indic)(close=self.df.loc[:,pair+'_close_h'], length=indic_length, append=True, col_names=(indic_name,))
-
-		print(self.df)
 
 		def find_high_of_last_red_candle(df, i_:int):
 			""" Returns the high of the last red candle. """
@@ -199,8 +202,8 @@ class BackTesting:
 		base_balance_finale    = self.df.loc[:, 'base_balance'].dropna().iloc[-1]
 		quote_balance_initiale = self.df.loc[:, 'quote_balance'].dropna().iloc[0]
 		quote_balance_finale   = self.df.loc[:, 'quote_balance'].dropna().iloc[-1]
-		price_base_at_first_quotevalue = self.df.loc[self.df['base_balance'] == base_balance_initiale, pair+'_h'].iloc[0]
-		price_base_at_last_quotevalue  = self.df.loc[self.df['base_balance'] == base_balance_finale,   pair+'_h'].iloc[0]
+		price_base_at_first_quotevalue = self.df.loc[self.df['base_balance'] == base_balance_initiale, pair+'_close_h'].iloc[0]
+		price_base_at_last_quotevalue  = self.df.loc[self.df['base_balance'] == base_balance_finale,   pair+'_close_h'].iloc[0]
 		quote_profits = (Decimal(quote_balance_finale) / quote_balance_initiale - 1)*100
 		buy_hold_     = (price_base_at_last_quotevalue / price_base_at_first_quotevalue - 1)*100
 
@@ -231,25 +234,41 @@ class BackTesting:
 
 		indic_name = f'{indic}_{indic_length}'
 
-		# Pairs and spread ______________________________________________________________________________________________________________________
-		min_indice = None
-		max_indice = 1000
-		fig, ax1 = plt.subplots(figsize=(14,12))
-
+		# # Pairs and spread ______________________________________________________________________________________________________________________
+		# min_indice = None
+		# max_indice = 1000
+		# fig, ax1 = plt.subplots(figsize=(14,12))
+		#
 		# First plot
-		ax1.plot(self.df.index[min_indice:max_indice], self.df[pair+'_close_h'].iloc[min_indice:max_indice], color='blue',  label=f"{pair.replace(quote, '')} price in {quote}")
-		# Add the buys and sells
-		ax1.scatter(self.df.index[min_indice:max_indice], self.df['buyprice_'+pair].iloc[min_indice:max_indice],  color='orange', marker='x', s=55, label='Buys')
-		ax1.scatter(self.df.index[min_indice:max_indice], self.df['sellprice_'+pair].iloc[min_indice:max_indice], color='black',  marker='x', s=55, label='Sells')
-		# Add the linreg
-		ax1.plot(self.df.index[min_indice:max_indice], self.df[indic_name].iloc[min_indice:max_indice], color='green',  label=indic_name)
-		# Legend and tites
-		ax1.set_title(f'Simple Mean-Reversion  -  {self.timeframe}    -    indic:{indic_name}\n\nPrices of {pair.replace(quote, "")} in {quote}')
-		ax1.legend(loc="upper left")
-		ax1.set_ylabel(f'Price of {pair.replace(quote, "")} in {quote}')
-		ax1.tick_params(axis='y',  colors='blue')
-		plt.show()
+		# ax1.plot(self.df.index[min_indice:max_indice], self.df[pair+'_close_h'].iloc[min_indice:max_indice], color='blue',  label=f"{pair.replace(quote, '')} price in {quote}")
+		# mpf.plot(ohlc, type='candlestick')
+		# # Add the buys and sells
+		# ax1.scatter(self.df.index[min_indice:max_indice], self.df['buyprice_'+pair].iloc[min_indice:max_indice],  color='orange', marker='x', s=55, label='Buys')
+		# ax1.scatter(self.df.index[min_indice:max_indice], self.df['sellprice_'+pair].iloc[min_indice:max_indice], color='black',  marker='x', s=55, label='Sells')
+		# # Add the linreg
+		# ax1.plot(self.df.index[min_indice:max_indice], self.df[indic_name].iloc[min_indice:max_indice], color='green',  label=indic_name)
+		# # Legend and tites
+		# ax1.set_title(f'Simple Mean-Reversion  -  {self.timeframe}    -    indic:{indic_name}\n\nPrices of {pair.replace(quote, "")} in {quote}')
+		# ax1.legend(loc="upper left")
+		# ax1.set_ylabel(f'Price of {pair.replace(quote, "")} in {quote}')
+		# ax1.tick_params(axis='y',  colors='blue')
+		# plt.show()
 
+		fig = go.Figure(data=[go.Candlestick(x 	   = self.df.index,
+											 open  = self.df.loc[:,[pair+'_open_h']],
+											 high  = self.df.loc[:,[pair+'_high_h']],
+											 low   = self.df.loc[:,[pair+'_low_h']],
+											 close = self.df.loc[:,[pair+'_close_h']],
+											 )])
+
+		fig.show()
+		# # Set line and fill colors of candles
+		# cs = fig.data[0]
+		# cs.increasing.fillcolor  = '#3D9970'    # '#008000'
+		# cs.increasing.line.color = '#3D9970'    # '#008000'
+		# cs.decreasing.fillcolor  = '#FF4136'    # '#800000'
+		# cs.decreasing.line.color = '#FF4136'    # '#800000'
+		# fig.show()
 
 		# Strategy evolution ______________________________________________________________________________________________________________________
 		fig, ax1 = plt.subplots(figsize = (14,8))
@@ -279,7 +298,7 @@ class BackTesting:
 
 if __name__ == '__main__':
 
-	backtester = BackTesting('1h')
+	backtester = BackTesting('1D')
 	backtester.backtest(quote    		  = 'BTC',
 						pair      		  = 'ETHBTC',
 						starting_balances = dict(quote=1, base=0),

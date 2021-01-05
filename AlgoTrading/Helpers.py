@@ -97,3 +97,7 @@ class HelperMethods:
         else:
             # If the bot did only 1 buy order and never sold, we can't compute the hold_duration!
             return None
+
+    @staticmethod
+    def locked_in_trades(quote:str):
+        return sum([float(dict(bot)['quoteBalance']) for bot in database.GetAllBots() if dict(bot)['status']=='Looking to exit' if dict(bot)['quoteasset']==quote])

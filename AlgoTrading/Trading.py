@@ -210,119 +210,123 @@ class Trading:
         signal = random.choice(['buy', 'sell'])
 
         if signal == 'buy':
+            try:
+                # Mandatory parameters to send to the endpoint:
+                buy_order_parameters = dict(symbol = pair,
+                                            side   = "BUY",
+                                            type   = "LIMIT")
 
-            # Mandatory parameters to send to the endpoint:
-            buy_order_parameters = dict(symbol = pair,
-                                        side   = "BUY",
-                                        type   = "LIMIT")
+                quoteOrderQty, buy_price, quantity = Decimal('0'), Decimal('0'), Decimal('0')
 
-            quoteOrderQty, buy_price, quantity = Decimal('0'), Decimal('0'), Decimal('0')
+                # Additional mandatory parameters based on type
+                if buy_order_parameters['type'] == 'MARKET':
+                    quoteOrderQty = Decimal(database.GetBot(pair)['quoteBalance'])
+                    buy_order_parameters['quoteOrderQty'] = format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f')		    # specifies the amount the user wants to spend (when buying) or receive (when selling) of the quote asset; the correct quantity will be determined based on the market liquidity and quoteOrderQty
 
-            # Additional mandatory parameters based on type
-            if buy_order_parameters['type'] == 'MARKET':
-                quoteOrderQty = Decimal(database.GetBot(pair)['quoteBalance'])
-                buy_order_parameters['quoteOrderQty'] = format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f')		    # specifies the amount the user wants to spend (when buying) or receive (when selling) of the quote asset; the correct quantity will be determined based on the market liquidity and quoteOrderQty
+                elif buy_order_parameters['type'] == 'LIMIT':
+                    market_price  = exchange.GetLastestPriceOfPair(pair=pair)                                                       # market_price is a string
+                    buy_price     = exchange.RoundToValidPrice(pair=pair, price=Decimal(market_price)*Decimal(0.99))                # buy_price is a Decimal        # Addresses the issue of PRICE_FILTER
+                    quantity      = exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(bot['quoteBalance'])/buy_price)       # quantity  is a Decimal        # Addresses the issue of LOT_SIZE
+                    quoteOrderQty = buy_price*quantity
 
-            elif buy_order_parameters['type'] == 'LIMIT':
-                market_price  = exchange.GetLastestPriceOfPair(pair=pair)                                                       # market_price is a string
-                buy_price     = exchange.RoundToValidPrice(pair=pair, price=Decimal(market_price)*Decimal(0.99))                # buy_price is a Decimal        # Addresses the issue of PRICE_FILTER
-                quantity      = exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(bot['quoteBalance'])/buy_price)       # quantity  is a Decimal        # Addresses the issue of LOT_SIZE
-                quoteOrderQty = buy_price*quantity
+                    buy_order_parameters['timeInForce'] = 'GTC'		 		                                                        # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
+                    buy_order_parameters['price'] 	    = format(round(buy_price, bot['baseAssetPrecision']), 'f')
+                    buy_order_parameters['quantity']    = format(round(quantity,  bot['baseAssetPrecision']), 'f')
 
-                buy_order_parameters['timeInForce'] = 'GTC'		 		                                                        # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
-                buy_order_parameters['price'] 	    = format(round(buy_price, bot['baseAssetPrecision']), 'f')
-                buy_order_parameters['quantity']    = format(round(quantity,  bot['baseAssetPrecision']), 'f')
+                # Place a buy order
+                # place_order_time = datetime.utcnow()
+                place_order_time = datetime.utcfromtimestamp(exchange.GetServerTime()/1000)
+                buy_order_result = exchange.PlaceOrder(order_params=buy_order_parameters, test_order=self.paper_trading)
 
-            # Place a buy order
-            # place_order_time = datetime.utcnow()
-            place_order_time = datetime.utcfromtimestamp(exchange.GetServerTime()/1000)
-            buy_order_result = exchange.PlaceOrder(order_params=buy_order_parameters, test_order=self.paper_trading)
+                if self.paper_trading:
+                    dummy_buy_order_result = {"symbol"               : pair,
+                                              "orderId"              : str(uuid1()),
+                                              "orderListId"          : -1,
+                                              "clientOrderId"        : "Buy_6gCrw2kRUAF9CvJDGP16IP",
+                                              "transactTime"         : str(exchange.GetServerTime()),
+                                              "price"                : format(round(buy_price,     bot['quotePrecision']),      'f'),
+                                              "origQty"              : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
+                                              "executedQty"          : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
+                                              "cummulativeQuoteQty"  : format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f'),     # On suppose que tout est passé et que les frais ont été payés en BNB
+                                              "status"               : "FILLED",
+                                              "timeInForce"          : "GTC",
+                                              "type"                 : buy_order_parameters['type'],
+                                              "side"                 : buy_order_parameters['side']}
+                    buy_order_result = {**dummy_buy_order_result, **buy_order_result}
 
-            if self.paper_trading:
-                dummy_buy_order_result = {"symbol"               : pair,
-                                          "orderId"              : str(uuid1()),
-                                          "orderListId"          : -1,
-                                          "clientOrderId"        : "Buy_6gCrw2kRUAF9CvJDGP16IP",
-                                          "transactTime"         : str(exchange.GetServerTime()),
-                                          "price"                : format(round(buy_price,     bot['quotePrecision']),      'f'),
-                                          "origQty"              : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
-                                          "executedQty"          : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
-                                          "cummulativeQuoteQty"  : format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f'),     # On suppose que tout est passé et que les frais ont été payés en BNB
-                                          "status"               : "FILLED",
-                                          "timeInForce"          : "GTC",
-                                          "type"                 : buy_order_parameters['type'],
-                                          "side"                 : buy_order_parameters['side']}
-                buy_order_result = {**dummy_buy_order_result, **buy_order_result}
+                if "code" in buy_order_result:
+                    formatted_transactTime = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime('%H:%M:%S')
+                    print(f"\t{formatted_transactTime} - Error in placing a buy {'test' if self.paper_trading else ''} order on {pair} at {buy_price} :/")
+                    database.UpdateBot(pair=pair, status='', quoteBalance='')
+                    print(pair, buy_order_result)
+                    return None
 
-            if "code" in buy_order_result:
-                formatted_transactTime = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime('%H:%M:%S')
-                print(f"\t{formatted_transactTime} - Error in placing a buy {'test' if self.paper_trading else ''} order on {pair} at {buy_price} :/")
+                else:
+                    text = "\t{time} - Success in placing a buy  {test} order on {pair:<8}  :  bought {quantity:<15} {base:<5} at {price:<12} {quoteasset} for {quoteQty:<9} {quoteasset}.".format(time       = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                                                                                                                                                                                   test       = 'test' if self.paper_trading else '',
+                                                                                                                                                                                                   pair       = pair,
+                                                                                                                                                                                                   quantity   = buy_order_result['executedQty'],
+                                                                                                                                                                                                   base       = pair.replace(bot['quoteasset'], ''),
+                                                                                                                                                                                                   price      = buy_price,
+                                                                                                                                                                                                   quoteasset = bot['quoteasset'],
+                                                                                                                                                                                                   quoteQty   = buy_order_result['cummulativeQuoteQty'])
+
+                    print(text)
+
+                    # Compute the time taken to fill the order
+                    timedelta_to_fill = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000) - place_order_time
+
+                    # Compute the fees in quoteasset and BNB
+                    quote_fee = Decimal(buy_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
+                    BNB_fee   = quote_fee / Decimal(exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
+
+                    database.SaveOrder(quoteasset        = bot['quoteasset'],
+                                       order_result      = buy_order_result,
+                                       hold_duration     = '-',
+                                       profit            = '-',
+                                       quote_fee         = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),
+                                       BNB_fee           = format(round(BNB_fee,   bot['BNB_precision']),       'f'),
+                                       profit_minus_fees = '-',
+                                       time_to_fill      = str(timedelta_to_fill))
+
+                    database.UpdateBot(pair             = pair,
+                                       status           = 'Looking to exit',
+                                       quoteBalance     = buy_order_result['cummulativeQuoteQty'],
+                                       baseBalance      = buy_order_result['executedQty'],
+                                       last_order_date  = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
+                                       number_of_orders = +1,                                                                # Added
+                                       bot_quote_fees   = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),         # Added to the current bot_quote_fees
+                                       bot_BNB_fees     = format(round(BNB_fee,   bot['BNB_precision']),       'f'))         # Added
+
+
+                    # Update the balances count
+                    database.UpdateAccountBalance(quoteasset                 = bot['quoteasset'],
+                                                  real_quote_balance         = exchange.GetAccountBalance(quoteasset=bot['quoteasset']),
+                                                  real_profit                = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),
+                                                  internal_quote_balance     = format(round(-Decimal(buy_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),           # Added
+                                                  internal_profit            = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),                                                    # Added
+                                                  internal_quote_fees        = format(round(quote_fee,    bot['quoteAssetPrecision']), 'f'),                                                    # Added
+                                                  internal_BNB_fees          = format(round(BNB_fee,      bot['BNB_precision']),       'f'),                                                    # Added
+                                                  internal_profit_minus_fees = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),                                                    # Added
+                                                  quoteAssetPrecision        = bot['quoteAssetPrecision'],
+                                                  BNB_Precision              = bot['BNB_precision'])
+
+
+
+                    # Send a text to telegram
+                    if self.send_to_telegram:
+                        self.send_text_to_telegram(text)
+
+                    dict_to_fill[pair] = [datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                          Decimal(buy_order_result['price']).normalize(),
+                                          Decimal(buy_order_result['executedQty']).normalize(),
+                                          Decimal(buy_order_result['cummulativeQuoteQty']).normalize()]
+
+                    return dict_to_fill
+
+            except Exception as e:
                 database.UpdateBot(pair=pair, status='', quoteBalance='')
-                print(pair, buy_order_result)
-                return None
-
-            else:
-                text = "\t{time} - Success in placing a buy  {test} order on {pair:<8}  :  bought {quantity:<15} {base:<5} at {price:<11} {quoteasset} for {quoteQty:<9} {quoteasset}.".format(time       = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                                                                                                                                                                                test       = 'test' if self.paper_trading else '',
-                                                                                                                                                                                                pair       = pair,
-                                                                                                                                                                                                quantity   = buy_order_result['executedQty'],
-                                                                                                                                                                                                base       = pair.replace(bot['quoteasset'], ''),
-                                                                                                                                                                                                price      = buy_price,
-                                                                                                                                                                                                quoteasset = bot['quoteasset'],
-                                                                                                                                                                                                quoteQty   = buy_order_result['cummulativeQuoteQty'])
-
-                print(text)
-
-                # Compute the time taken to fill the order
-                timedelta_to_fill = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000) - place_order_time
-
-                # Compute the fees in quoteasset and BNB
-                quote_fee = Decimal(buy_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
-                BNB_fee   = quote_fee / Decimal(exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
-
-                database.SaveOrder(quoteasset        = bot['quoteasset'],
-                                   order_result      = buy_order_result,
-                                   hold_duration     = '-',
-                                   profit            = '-',
-                                   quote_fee         = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),
-                                   BNB_fee           = format(round(BNB_fee,   bot['BNB_precision']),       'f'),
-                                   profit_minus_fees = '-',
-                                   time_to_fill      = str(timedelta_to_fill))
-
-                database.UpdateBot(pair             = pair,
-                                   status           = 'Looking to exit',
-                                   quoteBalance     = buy_order_result['cummulativeQuoteQty'],
-                                   baseBalance      = buy_order_result['executedQty'],
-                                   last_order_date  = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
-                                   number_of_orders = +1,                                                                # Added
-                                   bot_quote_fees   = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),         # Added to the current bot_quote_fees
-                                   bot_BNB_fees     = format(round(BNB_fee,   bot['BNB_precision']),       'f'))         # Added
-
-
-                # Update the balances count
-                database.UpdateAccountBalance(quoteasset                 = bot['quoteasset'],
-                                              real_quote_balance         = exchange.GetAccountBalance(quoteasset=bot['quoteasset']),
-                                              real_profit                = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),
-                                              internal_quote_balance     = format(round(-Decimal(buy_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),           # Added
-                                              internal_profit            = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),                                                    # Added
-                                              internal_quote_fees        = format(round(quote_fee,    bot['quoteAssetPrecision']), 'f'),                                                    # Added
-                                              internal_BNB_fees          = format(round(BNB_fee,      bot['BNB_precision']),       'f'),                                                    # Added
-                                              internal_profit_minus_fees = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),                                                    # Added
-                                              quoteAssetPrecision        = bot['quoteAssetPrecision'],
-                                              BNB_Precision              = bot['BNB_precision'])
-
-
-
-                # Send a text to telegram
-                if self.send_to_telegram:
-                    self.send_text_to_telegram(text)
-
-                dict_to_fill[pair] = [datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                      Decimal(buy_order_result['price']).normalize(),
-                                      Decimal(buy_order_result['executedQty']).normalize(),
-                                      Decimal(buy_order_result['cummulativeQuoteQty']).normalize()]
-
-                return dict_to_fill
+                print(f'\tError in processing a {"test" if self.paper_trading else ""} buy order on {pair}. Error : {e}.')
 
         else:
             database.UpdateBot(pair=pair, status='', quoteBalance='')
@@ -349,131 +353,135 @@ class Trading:
         signal = random.choice(['buy', 'sell'])
 
         if signal == 'sell':
+            try:
+                # Mandatory parameters to send to the endpoint:
+                sell_order_parameters = dict(symbol = pair,
+                                             side   = "SELL",
+                                             type   = "LIMIT")
 
-            # Mandatory parameters to send to the endpoint:
-            sell_order_parameters = dict(symbol = pair,
-                                         side   = "SELL",
-                                         type   = "LIMIT")
+                quoteOrderQty, sell_price, quantity = Decimal('0'), Decimal('0'), Decimal('0')
+                market_price  = exchange.GetLastestPriceOfPair(pair=pair)                                                       # market_price is a string
 
-            quoteOrderQty, sell_price, quantity = Decimal('0'), Decimal('0'), Decimal('0')
-            market_price  = exchange.GetLastestPriceOfPair(pair=pair)                                                       # market_price is a string
+                # Additional mandatory parameters based on type
+                if sell_order_parameters['type'] == 'MARKET':
+                    quoteOrderQty = Decimal(database.GetBot(pair)['quoteBalance'])
+                    sell_price    = market_price
+                    # Additional mandatory parameter : quoteOrderQty
+                    sell_order_parameters['quoteOrderQty'] = format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f')			# specifies the amount the user wants to spend (when buying) or receive (when selling) of the quote asset; the correct quantity will be determined based on the market liquidity and quoteOrderQty
 
-            # Additional mandatory parameters based on type
-            if sell_order_parameters['type'] == 'MARKET':
-                quoteOrderQty = Decimal(database.GetBot(pair)['quoteBalance'])
-                sell_price    = market_price
-                # Additional mandatory parameter : quoteOrderQty
-                sell_order_parameters['quoteOrderQty'] = format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f')			# specifies the amount the user wants to spend (when buying) or receive (when selling) of the quote asset; the correct quantity will be determined based on the market liquidity and quoteOrderQty
+                elif sell_order_parameters['type'] == 'LIMIT':
+                    sell_price    = exchange.RoundToValidPrice(pair=pair, price=Decimal(market_price)*Decimal(1.01))                # buy_price is a Decimal
+                    quantity      = exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(bot['quoteBalance'])/sell_price)      # quantity  is a Decimal
+                    quoteOrderQty = sell_price*quantity
 
-            elif sell_order_parameters['type'] == 'LIMIT':
-                sell_price    = exchange.RoundToValidPrice(pair=pair, price=Decimal(market_price)*Decimal(1.01))                # buy_price is a Decimal
-                quantity      = exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(bot['quoteBalance'])/sell_price)      # quantity  is a Decimal
-                quoteOrderQty = sell_price*quantity
+                    # Additional mandatory parameters : price & quantity
+                    sell_order_parameters['timeInForce'] = 'GTC'		 		                                                     # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
+                    sell_order_parameters['price'] 	     = format(round(sell_price, bot['baseAssetPrecision']), 'f')
+                    sell_order_parameters['quantity']    = format(round(quantity,   bot['baseAssetPrecision']), 'f')
 
-                # Additional mandatory parameters : price & quantity
-                sell_order_parameters['timeInForce'] = 'GTC'		 		                                                     # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
-                sell_order_parameters['price'] 	     = format(round(sell_price, bot['baseAssetPrecision']), 'f')
-                sell_order_parameters['quantity']    = format(round(quantity,   bot['baseAssetPrecision']), 'f')
+                # Simulate a sell order
+                # place_order_time  = datetime.utcnow()
+                place_order_time = datetime.utcfromtimestamp(exchange.GetServerTime()/1000)
+                sell_order_result = exchange.PlaceOrder(order_params=sell_order_parameters, test_order=self.paper_trading)
 
-            # Simulate a sell order
-            # place_order_time  = datetime.utcnow()
-            place_order_time = datetime.utcfromtimestamp(exchange.GetServerTime()/1000)
-            sell_order_result = exchange.PlaceOrder(order_params=sell_order_parameters, test_order=self.paper_trading)
+                if self.paper_trading:
+                    dummy_sell_order_result = {"symbol"               : pair,
+                                               "orderId"              : str(uuid1()),
+                                               "orderListId"          : -1,
+                                               "clientOrderId"        : "Sell_6gCrw2kRUAF9CvJDGP16IP",
+                                               "transactTime"         : str(exchange.GetServerTime()),
+                                               "price"                : format(round(sell_price,    bot['quotePrecision']),      'f'),
+                                               "origQty"              : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
+                                               "executedQty"          : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
+                                               "cummulativeQuoteQty"  : format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f'),
+                                               "status"               : "FILLED",
+                                               "timeInForce"          : "GTC",
+                                               "type"                 : sell_order_parameters['type'],
+                                               "side"                 : sell_order_parameters['side']}
+                    sell_order_result = {**dummy_sell_order_result, **sell_order_result}
 
-            if self.paper_trading:
-                dummy_sell_order_result = {"symbol"               : pair,
-                                           "orderId"              : str(uuid1()),
-                                           "orderListId"          : -1,
-                                           "clientOrderId"        : "Sell_6gCrw2kRUAF9CvJDGP16IP",
-                                           "transactTime"         : str(exchange.GetServerTime()),
-                                           "price"                : format(round(sell_price,    bot['quotePrecision']),      'f'),
-                                           "origQty"              : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
-                                           "executedQty"          : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
-                                           "cummulativeQuoteQty"  : format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f'),
-                                           "status"               : "FILLED",
-                                           "timeInForce"          : "GTC",
-                                           "type"                 : sell_order_parameters['type'],
-                                           "side"                 : sell_order_parameters['side']}
-                sell_order_result = {**dummy_sell_order_result, **sell_order_result}
+                if "code" in sell_order_result:
+                    formatted_transactTime = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime('%H:%M:%S')
+                    print(f"\t{formatted_transactTime} - Error in placing a sell {'test' if self.paper_trading else ''} order on {pair} at {sell_price} :/")
+                    print(pair, sell_order_result)
+                    return None
 
-            if "code" in sell_order_result:
-                formatted_transactTime = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime('%H:%M:%S')
-                print(f"\t{formatted_transactTime} - Error in placing a sell {'test' if self.paper_trading else ''} order on {pair} at {sell_price} :/")
-                print(pair, sell_order_result)
-                return None
-
-            else:
-                # Compute the time taken to fill the order
-                timedelta_to_fill = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000) - place_order_time
-
-                # Compute the profit from the trade, in quoteasset
-                profit            = Decimal(sell_order_result['cummulativeQuoteQty']) - Decimal(database.GetBot(pair)['quoteBalance'])                     # On a pas encore update la balance donc on sait pour combien de quoteasset a acheté
-                quote_fee         = Decimal(sell_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
-                profit_minus_fees = profit - quote_fee - Decimal(dict(list(database.GetOrdersOfBot(pair))[-1])['quote_fee'])
-                BNB_fee           = quote_fee / Decimal(exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
-
-                # How long we have been holding the asset for
-                hold_timedelta = datetime.utcfromtimestamp(int(int(sell_order_result['transactTime'])/1000)) - datetime.strptime(dict(database.GetBot(pair=pair))['last_order_date'], "%Y-%m-%d %H:%M:%S")
-
-                text = "\t{time} - Success in placing a sell {test} order on {pair:<8}  :  sold {quantity:<15} {base:<5} at {price:<10} {quoteasset} for {quoteQty:<9} {quoteasset}. \tProfit : {profit} {quoteasset}".format(time       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                                                                                                                                                                                                             test       = 'test' if self.paper_trading else '',
-                                                                                                                                                                                                                             pair       = pair,
-                                                                                                                                                                                                                             quantity   = sell_order_result['executedQty'],
-                                                                                                                                                                                                                             base       = pair.replace(bot['quoteasset'], ''),
-                                                                                                                                                                                                                             price      = sell_price,
-                                                                                                                                                                                                                             quoteasset = bot['quoteasset'],
-                                                                                                                                                                                                                             quoteQty   = sell_order_result['cummulativeQuoteQty'],
-                                                                                                                                                                                                                             profit     = profit)
-                print(text)
-                # print(hold_timedelta)
-                # print(timedelta_to_fill)
-                database.SaveOrder(quoteasset        = bot['quoteasset'],
-                                   order_result      = sell_order_result,
-                                   hold_duration     = str(hold_timedelta),
-                                   profit            = format(round(profit,            bot['quoteAssetPrecision']), 'f'),
-                                   quote_fee         = format(round(quote_fee,         bot['quoteAssetPrecision']), 'f'),
-                                   BNB_fee           = format(round(BNB_fee,           bot['BNB_precision']),       'f'),
-                                   profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),
-                                   time_to_fill      = str(timedelta_to_fill))
-
-                database.UpdateBot(pair                  = pair,
-                                   status                = 'Looking to enter',
-                                   quoteBalance          = '',
-                                   baseBalance           = '',
-                                   last_order_date       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
-                                   last_profit           = str(profit),
-                                   bot_profit            = format(round(profit,            bot['quoteAssetPrecision']), 'f'),       # Added to the current bot_profit
-                                   bot_quote_fees        = format(round(quote_fee,         bot['quoteAssetPrecision']), 'f'),       # Added
-                                   bot_BNB_fees          = format(round(BNB_fee,           bot['BNB_precision']),       'f'),       # Added
-                                   bot_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),       # Added
-                                   number_of_orders      = +1)
-                if profit>0:
-                    database.UpdateBot(pair=pair, profitable_sells=+1)
                 else:
-                    database.UpdateBot(pair=pair, unprofitable_sells=+1)
+                    # Compute the time taken to fill the order
+                    timedelta_to_fill = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000) - place_order_time
 
-                # Update the internal balances count
-                database.UpdateAccountBalance(quoteasset                 = bot['quoteasset'],
-                                              real_quote_balance         = exchange.GetAccountBalance(quoteasset=bot['quoteasset']),
-                                              real_profit                = format(round(Decimal(exchange.GetAccountBalance(bot['quoteasset']))/Decimal(database.GetStartBalance(quoteasset=bot['quoteasset']))*100, 8), 'f'),
-                                              internal_quote_balance     = format(round(Decimal(sell_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),       # Added
-                                              internal_profit            = format(round(profit,    bot['quoteAssetPrecision']), 'f'),                                                   # Added
-                                              internal_quote_fees        = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),                                                   # Added
-                                              internal_BNB_fees          = format(round(BNB_fee,   bot['BNB_precision']),       'f'),                                                   # Added
-                                              internal_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),                                           # Added
-                                              quoteAssetPrecision        = bot['quoteAssetPrecision'],
-                                              BNB_Precision              = bot['BNB_precision'])
+                    # Compute the profit from the trade, in quoteasset
+                    profit            = Decimal(sell_order_result['cummulativeQuoteQty']) - Decimal(database.GetBot(pair)['quoteBalance'])                     # On a pas encore update la balance donc on sait pour combien de quoteasset a acheté
+                    quote_fee         = Decimal(sell_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
+                    profit_minus_fees = profit - quote_fee - Decimal(dict(list(database.GetOrdersOfBot(pair))[-1])['quote_fee'])
+                    BNB_fee           = quote_fee / Decimal(exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
 
-                # Send a text to telegram
-                if self.send_to_telegram:
-                    self.send_text_to_telegram(text)
+                    # How long we have been holding the asset for
+                    hold_timedelta = datetime.utcfromtimestamp(int(int(sell_order_result['transactTime'])/1000)) - datetime.strptime(dict(database.GetBot(pair=pair))['last_order_date'], "%Y-%m-%d %H:%M:%S")
 
-                dict_to_fill[pair] = [datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                      Decimal(sell_order_result['price']).normalize(),
-                                      Decimal(sell_order_result['executedQty']).normalize(),
-                                      Decimal(sell_order_result['cummulativeQuoteQty']).normalize()]
+                    text = "\t{time} - Success in placing a sell {test} order on {pair:<8}  :  sold {quantity:<15} {base:<5} at {price:<10} {quoteasset} for {quoteQty:<9} {quoteasset}. \tProfit : {profit} {quoteasset}".format(time       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                                                                                                                                                                                                                 test       = 'test' if self.paper_trading else '',
+                                                                                                                                                                                                                                 pair       = pair,
+                                                                                                                                                                                                                                 quantity   = sell_order_result['executedQty'],
+                                                                                                                                                                                                                                 base       = pair.replace(bot['quoteasset'], ''),
+                                                                                                                                                                                                                                 price      = sell_price,
+                                                                                                                                                                                                                                 quoteasset = bot['quoteasset'],
+                                                                                                                                                                                                                                 quoteQty   = sell_order_result['cummulativeQuoteQty'],
+                                                                                                                                                                                                                                 profit     = profit)
+                    print(text)
+                    # print(hold_timedelta)
+                    # print(timedelta_to_fill)
+                    database.SaveOrder(quoteasset        = bot['quoteasset'],
+                                       order_result      = sell_order_result,
+                                       hold_duration     = str(hold_timedelta),
+                                       profit            = format(round(profit,            bot['quoteAssetPrecision']), 'f'),
+                                       quote_fee         = format(round(quote_fee,         bot['quoteAssetPrecision']), 'f'),
+                                       BNB_fee           = format(round(BNB_fee,           bot['BNB_precision']),       'f'),
+                                       profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),
+                                       time_to_fill      = str(timedelta_to_fill))
 
-                return dict_to_fill
+                    database.UpdateBot(pair                  = pair,
+                                       status                = 'Looking to enter',
+                                       quoteBalance          = '',
+                                       baseBalance           = '',
+                                       last_order_date       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
+                                       last_profit           = str(profit),
+                                       bot_profit            = format(round(profit,            bot['quoteAssetPrecision']), 'f'),       # Added to the current bot_profit
+                                       bot_quote_fees        = format(round(quote_fee,         bot['quoteAssetPrecision']), 'f'),       # Added
+                                       bot_BNB_fees          = format(round(BNB_fee,           bot['BNB_precision']),       'f'),       # Added
+                                       bot_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),       # Added
+                                       number_of_orders      = +1)
+                    if profit>0:
+                        database.UpdateBot(pair=pair, profitable_sells=+1)
+                    else:
+                        database.UpdateBot(pair=pair, unprofitable_sells=+1)
+
+                    # Update the internal balances count
+                    database.UpdateAccountBalance(quoteasset                 = bot['quoteasset'],
+                                                  real_quote_balance         = exchange.GetAccountBalance(quoteasset=bot['quoteasset']),
+                                                  real_profit                = format(round(Decimal(exchange.GetAccountBalance(bot['quoteasset']))/Decimal(database.GetStartBalance(quoteasset=bot['quoteasset']))*100, 8), 'f'),
+                                                  internal_quote_balance     = format(round(Decimal(sell_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),       # Added
+                                                  internal_profit            = format(round(profit,    bot['quoteAssetPrecision']), 'f'),                                                   # Added
+                                                  internal_quote_fees        = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),                                                   # Added
+                                                  internal_BNB_fees          = format(round(BNB_fee,   bot['BNB_precision']),       'f'),                                                   # Added
+                                                  internal_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),                                           # Added
+                                                  quoteAssetPrecision        = bot['quoteAssetPrecision'],
+                                                  BNB_Precision              = bot['BNB_precision'])
+
+                    # Send a text to telegram
+                    if self.send_to_telegram:
+                        self.send_text_to_telegram(text)
+
+                    dict_to_fill[pair] = [datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                          Decimal(sell_order_result['price']).normalize(),
+                                          Decimal(sell_order_result['executedQty']).normalize(),
+                                          Decimal(sell_order_result['cummulativeQuoteQty']).normalize()]
+
+                    return dict_to_fill
+
+            except Exception as e:
+                # We don't update the error in the case of an error : it still needs to sell.
+                print(f'\tError in processing a {"test" if self.paper_trading else ""} sell order on {pair}. Error : {e}.')
 
 
     def send_text_to_telegram(self, bot_message):
@@ -523,7 +531,7 @@ class Trading:
                     allocation = account_balance[quoteasset] / (len(trading_pairs[quoteasset])-len(open_positions[quoteasset]))
                     print(f"Paper trading on the top {BotsPerQuoteAsset} pairs by volume on {quoteasset} : {trading_pairs[quoteasset]}")
                     if open_positions[quoteasset]:
-                        print(f"(using {open_positions[quoteasset]} which are still trying to sell.)")
+                        print(f"(using {open_positions[quoteasset]} which {'is' if len(open_positions[quoteasset])==1 else 'are'} still trying to sell.)")
                     print("{quoteasset} balance : {quoteasset_balance} {quoteasset}. Each new bot is given {balance} {quoteasset} to trade and has been set as active.".format(quoteasset_balance = account_balance[quoteasset].normalize(),
                                                                                                                                                                                balance            = format(round(allocation, 8), 'f'),
                                                                                                                                                                                quoteasset         = quoteasset))

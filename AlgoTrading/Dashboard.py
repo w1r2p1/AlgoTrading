@@ -58,7 +58,7 @@ class Dashboard:
 
                                                                             html.Tr([html.Td("Binance balance"),         html.Td(exchange.GetAccountBalance(quoteasset) + " " + quoteasset, style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Internal balance"),        html.Td(database.GetAccountBalance(quoteasset=quoteasset, real_or_internal='internal') + " " + quoteasset, style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Internal balance"),        html.Td(f'{database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")} {quoteasset} \t + {helpers.locked_in_trades(quoteasset)} {quoteasset} locked in {helpers.open_orders(quoteasset)} trades. Sum = {sum([float(database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")), helpers.locked_in_trades(quoteasset)])} {quoteasset}' , style={'color':'#a3a7b0'})]),
 
                                                                             html.Tr([html.Td("Profit"),                  html.Td("{profit_in_quote} {quoteasset} ({profit_in_percentage}%)".format(quoteasset           = quoteasset,
                                                                                                                                                                                                    profit_in_quote      = database.get_profit(quoteasset, real_or_internal='internal'),

@@ -18,6 +18,7 @@ from   datetime import datetime, timedelta
 from   decimal import Decimal
 import re
 import os
+from freezegun import freeze_time
 
 # --------------------------------------
 # # Clear file database.db
@@ -563,57 +564,86 @@ class Trading:
 
         sp = yaspin()
         sp.start()
-
+        timeframe = '1h'
         parsed_timeframe = re.findall(r'[A-Za-z]+|\d+', timeframe)      # Separates '30m' in ['30', 'm']
         next_candle = None
         after_next_candle = None
-        now = datetime.now()
 
-        # Find the time of the next candle
-        if parsed_timeframe[1] == 'm':
-            if int(parsed_timeframe[0]) == 1:
-                next_candle = datetime(now.year, now.month, now.day, now.hour, now.minute+1, 0)
-            else:
-                if now.minute < 60-int(parsed_timeframe[0]):
-                    min_till_candle = int(parsed_timeframe[0])-(now.minute % int(parsed_timeframe[0]))
-                    next_candle     = datetime(now.year, now.month, now.day, now.hour, now.minute+min_till_candle, 0)
+        start_datetime = datetime(year=2021, month=1, day=31, hour=23, minute=20, second=0)
+        with freeze_time(start_datetime) as frozen_datetime:
+            assert frozen_datetime() == start_datetime
+            now = datetime.now()
+
+            # Find the time of the next candle
+            # Handle minute timeframes
+            if parsed_timeframe[1] == 'm':
+                # Special case of 1 minute timeframe
+                if int(parsed_timeframe[0]) == 1:
+                    # next_candle = datetime(now.year+1  if now.month == 12 else now.year,
+                    #                        now.month+1 if now.day   == 31 else now.day,
+                    #                        now.day+1   if now.hour  == 23 else now.day,
+                    #                        0, 0, 0)
+                    if now.minute == 59:
+                        if now.hour == 23:
+                            next_candle = datetime(now.year, now.month, now.day+1, 0, 0, 0)
+                        else:
+                            next_candle = datetime(now.year, now.month, now.day, now.hour+1, 0, 0)
+                    else:
+                        next_candle = datetime(now.year, now.month, now.day, now.hour, now.minute+1, 0)
+                # Other minute timeframes
+                else:
+                    if now.minute < 60-int(parsed_timeframe[0]):
+                        min_till_candle = int(parsed_timeframe[0])-(now.minute % int(parsed_timeframe[0]))
+                        next_candle     = datetime(now.year, now.month, now.day, now.hour, now.minute+min_till_candle, 0)
+                    else:
+                        if now.hour == 23:
+                            next_candle = datetime(now.year, now.month, now.day+1, 0, 0, 0)
+                        else:
+                            next_candle = datetime(now.year, now.month, now.day, now.hour+1, 0, 0)
+                after_next_candle = next_candle + timedelta(minutes=int(parsed_timeframe[0]))
+
+            # Handle hour timeframes
+            elif parsed_timeframe[1] == 'h':
+                if now.hour == 23:
+                    next_candle = datetime(now.year, now.month, now.day+1, 0, 0, 0)
                 else:
                     next_candle = datetime(now.year, now.month, now.day, now.hour+1, 0, 0)
-            after_next_candle = next_candle + timedelta(minutes=int(parsed_timeframe[0]))
+                after_next_candle = next_candle + timedelta(hours=int(parsed_timeframe[0]))
 
-        elif parsed_timeframe[1] == 'h':
-            next_candle = datetime(now.year, now.month, now.day, now.hour+int(parsed_timeframe[0]), 0, 0)
-            after_next_candle = next_candle + timedelta(hours=int(parsed_timeframe[0]))
+            sp.text = f'Waiting for the next {timeframe} candle (at {next_candle.strftime("%H:%M")}) to start trading.'
 
-        sp.text = f'Waiting for the next {timeframe} candle (at {next_candle.strftime("%H:%M")}) to start trading.'
+            wait_till_after_next = False
+            # estimated_duration_to_set_the_pairs = 55 # seconds
+            # # Update the pairs just before the candle arrives
+            # if now < next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs):
+            #     # If we have more than 57 seconds before the candle, then wait
+            #     pause.until(next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs))
+            # else:
+            #     # If we arrive less than 57 seconds before the candle, we don't have time to process the pairs.
+            #     sp.text = f'Too late for the candle at {next_candle.strftime("%H:%M")}. Waiting for the next one (at {after_next_candle.strftime("%H:%M")}).'
+            #     pause.until(after_next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs))        # Cas de la toute premiere candle : on ne fait rien si on arrive moins de 50 secondes avant, on attend la candle suivante.
+            #     wait_till_after_next = True
 
-        wait_till_after_next = False
-        estimated_duration_to_set_the_pairs = 55 # seconds
-        # Update the pairs just before the candle arrives
-        if now < next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs):
-            # If we have more than 57 seconds before the candle, then wait
-            pause.until(next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs))
-        else:
-            # If we arrive less than 57 seconds before the candle, we don't have time to process the pairs.
-            sp.text = f'Too late for the candle at {next_candle.strftime("%H:%M")}. Waiting for the next one (at {after_next_candle.strftime("%H:%M")}).'
-            pause.until(after_next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs))        # Cas de la toute premiere candle : on ne fait rien si on arrive moins de 50 secondes avant, on attend la candle suivante.
-            wait_till_after_next = True
+            sp.stop()
+            sp.hide()
 
-        sp.stop()
-        sp.hide()
+            print("_______________________________________")
+            print(colorama.Fore.GREEN + f'Candle : {next_candle.strftime("%Y-%m-%d %H:%M") if not wait_till_after_next else after_next_candle.strftime("%Y-%m-%d %H:%M")} (local time).')
+            self.set_pairs_to_trade_on()          # Takes ~50secs to run
 
-        print("_______________________________________")
-        print(colorama.Fore.GREEN + f'Candle : {next_candle.strftime("%Y-%m-%d %H:%M") if not wait_till_after_next else after_next_candle.strftime("%Y-%m-%d %H:%M")} (local time).')
-        self.set_pairs_to_trade_on()          # Takes ~50secs to run
+            # sp.start()
+            # sp.show()
+            # sp.text = "Candle is coming..."
+            # # If time left, pause until the candle arrives
+            # pause.until(next_candle-timedelta(seconds=1) if not wait_till_after_next else after_next_candle-timedelta(seconds=1))
+            # sp.stop()
+            # sp.hide()
+            # pause.until(next_candle if not wait_till_after_next else after_next_candle)
 
-        sp.start()
-        sp.show()
-        sp.text = "Candle is coming..."
-        # If time left, pause until the candle arrives
-        pause.until(next_candle-timedelta(seconds=1) if not wait_till_after_next else after_next_candle-timedelta(seconds=1))
-        sp.stop()
-        sp.hide()
-        pause.until(next_candle if not wait_till_after_next else after_next_candle)
+            end_datetime = start_datetime + timedelta(minutes=int(parsed_timeframe[0]))     # supposes minute timeframe
+            frozen_datetime.move_to(end_datetime)
+            print(datetime.now())
+            assert frozen_datetime() == end_datetime
 
         # # Display counter for the last 5 secs
         # for remaining in range(5, 0, -1):

@@ -17,17 +17,17 @@ import re
 import numpy as np
 import pandas_ta as ta  # Needed to plot the indicators
 
-
-exchange = Binance(filename='assets/credentials.txt')
-database = BotDatabase("assets/database.db")
-strategy = Strategy(name='SSF_Crossover')
-helpers  = HelperMethods()
-existing_quoteassets = set([dict(bot)['quoteasset'] for bot in database.GetAllBots()])       # ['ETH', 'BTC']
-
-
 class Dashboard:
 
-    def __init__(self):
+    def __init__(self, paper_trading:bool=True):
+
+        self.paper_trading = paper_trading
+        self.exchange = Binance(filename='assets/credentials.txt')
+        self.database = BotDatabase(name="assets/database_paper.db") if self.paper_trading else BotDatabase(name="assets/database_live.db")
+        self.helpers  = HelperMethods(database=self.database)
+        self.strategy = Strategy(name='SSF_Crossover')
+        self.existing_quoteassets = set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()])       # ['ETH', 'BTC']
+
         self.app = dash.Dash(__name__,
                              external_stylesheets=[dbc.themes.BOOTSTRAP],
                              meta_tags=[{"name": "viewport", "content": "width=device-width"}])
@@ -52,29 +52,29 @@ class Dashboard:
                                                                 [
                                                                     html.Tbody(
                                                                         [
-                                                                            html.Tr([html.Td("All orders"),              html.Td("{total_orders} (+{recent_orders} in 24h)".format(total_orders=helpers.total_orders(quoteasset), recent_orders=helpers.recent_orders(quoteasset)), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("All orders"),              html.Td("{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quoteasset), recent_orders=self.helpers.recent_orders(quoteasset)), style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Open orders"),             html.Td(helpers.open_orders(quoteasset), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Open orders"),             html.Td(self.helpers.open_orders(quoteasset), style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Binance balance"),         html.Td(exchange.GetAccountBalance(quoteasset) + " " + quoteasset, style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Binance balance"),         html.Td(self.exchange.GetAccountBalance(quoteasset) + " " + quoteasset, style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Internal balance"),        html.Td(f'{database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")} {quoteasset} \t + {helpers.locked_in_trades(quoteasset)} {quoteasset} locked in {helpers.open_orders(quoteasset)} trades. Sum = {sum([float(database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")), helpers.locked_in_trades(quoteasset)])} {quoteasset}' , style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Internal balance"),        html.Td(f'{self.database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")} {quoteasset} \t + {self.helpers.locked_in_trades(quoteasset)} {quoteasset} locked in {self.helpers.open_orders(quoteasset)} trades. Sum = {sum([float(self.database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")), self.helpers.locked_in_trades(quoteasset)])} {quoteasset}' , style={'color':'#a3a7b0'})]),
 
                                                                             html.Tr([html.Td("Profit"),                  html.Td("{profit_in_quote} {quoteasset} ({profit_in_percentage}%)".format(quoteasset           = quoteasset,
-                                                                                                                                                                                                   profit_in_quote      = database.get_profit(quoteasset, real_or_internal='internal'),
-                                                                                                                                                                                                   profit_in_percentage = format(round(Decimal(database.get_profit(quoteasset, real_or_internal='internal'))/Decimal(database.GetStartBalance(quoteasset=quoteasset))*100, 2), 'f')),
+                                                                                                                                                                                                   profit_in_quote      = self.database.get_profit(quoteasset, real_or_internal='internal'),
+                                                                                                                                                                                                   profit_in_percentage = format(round(Decimal(self.database.get_profit(quoteasset, real_or_internal='internal'))/Decimal(self.database.GetStartBalance(quoteasset=quoteasset))*100, 2), 'f')),
                                                                                                                                  style={'color':'#a3a7b0'})]),
                                                                             html.Tr([html.Td("Fees"),                    html.Td("{fees_in_quote} {quoteasset} ({fees_in_BNB} BNB)".format(quoteasset    = quoteasset,
-                                                                                                                                                                                           fees_in_quote = database.GetQuoteFees(quoteasset),
-                                                                                                                                                                                           fees_in_BNB   = database.GetBNBFees(quoteasset)),
+                                                                                                                                                                                           fees_in_quote = self.database.GetQuoteFees(quoteasset),
+                                                                                                                                                                                           fees_in_BNB   = self.database.GetBNBFees(quoteasset)),
                                                                                                                                  style={'color':'#a3a7b0'})]),
                                                                             html.Tr([html.Td("Profit - Fees"),           html.Td("{profit_minus_fees_in_quote} {quoteasset} ({profit_minus_fees_in_quote_in_percentage}%)".format(quoteasset                 = quoteasset,
-                                                                                                                                                                                                                                  profit_minus_fees_in_quote = database.GetProfit_minus_fees(quoteasset),
-                                                                                                                                                                                                                                  profit_minus_fees_in_quote_in_percentage = format(round(((Decimal(database.GetStartBalance(quoteasset=quoteasset))+Decimal(database.GetProfit_minus_fees(quoteasset)))/Decimal(database.GetStartBalance(quoteasset=quoteasset))-1)*100, 2), 'f')), style={'color':'#a3a7b0'})]),
-                                                                            html.Tr([html.Td("Average hold duration"),   html.Td("{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = helpers.quote_average_hold_duration(quoteasset).days,
-                                                                                                                                                                                     hours      = helpers.quote_average_hold_duration(quoteasset).days * 24 + helpers.quote_average_hold_duration(quoteasset).seconds // 3600,
-                                                                                                                                                                                     minutes    = (helpers.quote_average_hold_duration(quoteasset).seconds % 3600) // 60,
-                                                                                                                                                                                     seconds    = helpers.quote_average_hold_duration(quoteasset).seconds % 60), style={'color':'#a3a7b0'})]),
+                                                                                                                                                                                                                                  profit_minus_fees_in_quote = self.database.GetProfit_minus_fees(quoteasset),
+                                                                                                                                                                                                                                  profit_minus_fees_in_quote_in_percentage = format(round(((Decimal(self.database.GetStartBalance(quoteasset=quoteasset))+Decimal(self.database.GetProfit_minus_fees(quoteasset)))/Decimal(self.database.GetStartBalance(quoteasset=quoteasset))-1)*100, 2), 'f')), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Average hold duration"),   html.Td("{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.quote_average_hold_duration(quoteasset).days,
+                                                                                                                                                                                     hours      = self.helpers.quote_average_hold_duration(quoteasset).days * 24 + self.helpers.quote_average_hold_duration(quoteasset).seconds // 3600,
+                                                                                                                                                                                     minutes    = (self.helpers.quote_average_hold_duration(quoteasset).seconds % 3600) // 60,
+                                                                                                                                                                                     seconds    = self.helpers.quote_average_hold_duration(quoteasset).seconds % 60), style={'color':'#a3a7b0'})]),
                                                                         ]
                                                                     )
                                                                 ],
@@ -90,7 +90,7 @@ class Dashboard:
 
                                     dbc.Row(dbc.Col(html.Hr()))
                                 ])
-                         for counter, quoteasset in enumerate(existing_quoteassets)]
+                         for counter, quoteasset in enumerate(self.existing_quoteassets)]
                 ),
 
 
@@ -100,8 +100,8 @@ class Dashboard:
                 dbc.Row([dbc.Col(width=1),
                          dbc.Col(dcc.Dropdown(
                              id          = 'Dropdown_quote',
-                             options     = [{'label': quote, 'value': quote} for quote in list(existing_quoteassets)],
-                             value       = list(existing_quoteassets)[0],
+                             options     = [{'label': quote, 'value': quote} for quote in list(self.existing_quoteassets)],
+                             value       = list(self.existing_quoteassets)[0],
                              clearable   = False,
                              placeholder = "Select a quote")),
                          dbc.Col(width=8)]),
@@ -171,18 +171,17 @@ class Dashboard:
                        Input('Dropdown_duration',   'value'),
                        Input('Dropdown_indicators', 'value')])(self.plot_pair_data)
 
-    @staticmethod
-    def plot_balances_evolution(quoteasset:str, save:bool=False):
+    def plot_balances_evolution(self, quoteasset:str, save:bool=False):
         """Plots the evolution of the balance of each quoteasset since the first sell order."""
 
         fig = dict()
 
-        all_orders = list(database.get_quote_orders(quoteasset=quoteasset))
+        all_orders = list(self.database.get_quote_orders(quoteasset=quoteasset))
 
         profit_list = [Decimal(dict(order)['profit_minus_fees']) for order in all_orders if dict(order)['side'] == 'SELL']
         cummulative_profit_list1 = np.cumsum(profit_list).tolist()
         # Add the starting balance to each item
-        cummulative_profit_list2 = [item + Decimal(database.GetStartBalance(quoteasset)) for item in cummulative_profit_list1]
+        cummulative_profit_list2 = [item + Decimal(self.database.GetStartBalance(quoteasset)) for item in cummulative_profit_list1]
 
         fig['data'] = [{'x': [datetime.strptime(dict(order)['transactTime'], '%Y-%m-%d %H:%M:%S') for order in all_orders if
                               dict(order)['side'] == 'SELL'] + [datetime.utcnow()],
@@ -227,11 +226,10 @@ class Dashboard:
 
         return fig
 
-    @staticmethod
-    def plot_bot_history(bot:dict, resample_timeframe:str, nb_last_trades:str, indicators:list):
+    def plot_bot_history(self, bot:dict, resample_timeframe:str, nb_last_trades:str, indicators:list):
         """ Plots the candlestick chart with overlays for a bot, since we created it. """
 
-        opening_candles = 20														                            # Number of candles to add at the begining of the plot, just before the bot was created
+        opening_candles = 50														                            # Number of candles to add at the begining of the plot, just before the bot was created
 
         # Create figure with secondary y-axis
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -249,9 +247,9 @@ class Dashboard:
 
         # Set the correct start date of the plot based on the number of trades wanted
         if nb_last_trades == 'all':
-            displayed_trades = len(list(database.GetOrdersOfBot(pair)))
+            displayed_trades = len(list(self.database.GetOrdersOfBot(pair)))
             # Get the bot's creation date
-            utc_creation_date_string = dict(database.GetBot(pair=pair))['utc_creation_date']				    # datetime string
+            utc_creation_date_string = dict(self.database.GetBot(pair=pair))['utc_creation_date']				    # datetime string
             utc_creation_date 		 = datetime.strptime(utc_creation_date_string, '%Y-%m-%d %H:%M:%S')			# datetime
             # Compute the starting date of the plot (datetime)
             start_date = utc_creation_date - timedelta(seconds=opening_candles_duration)
@@ -261,20 +259,20 @@ class Dashboard:
                 "annotations"   : [dict(x=utc_creation_date_string, y=0.05, xref='x', yref='paper', showarrow=False, xanchor='left', text='Bot created')],
             })
         else:
-            if len(list(database.GetOrdersOfBot(pair))) > int(nb_last_trades):
+            if len(list(self.database.GetOrdersOfBot(pair))) > int(nb_last_trades):
                 #  If enough orders to display
                 displayed_trades = int(nb_last_trades)
-                first_trade_date_string = dict(list(database.GetOrdersOfBot(pair))[-int(nb_last_trades)])['transactTime']
+                first_trade_date_string = dict(list(self.database.GetOrdersOfBot(pair))[-int(nb_last_trades)])['transactTime']
                 start_date              = datetime.strptime(first_trade_date_string, '%Y-%m-%d %H:%M:%S')
             else:
                 # If not enough orders, display all of them
-                displayed_trades = len(list(database.GetOrdersOfBot(pair)))
-                first_trade_date_string = dict(list(database.GetOrdersOfBot(pair))[0])['transactTime']
+                displayed_trades = len(list(self.database.GetOrdersOfBot(pair)))
+                first_trade_date_string = dict(list(self.database.GetOrdersOfBot(pair))[0])['transactTime']
                 start_date              = datetime.strptime(first_trade_date_string, '%Y-%m-%d %H:%M:%S')
 
 
         # Get the corresponding candlestick data, from start_date to now
-        df = exchange.GetPairKlines(pair=pair, timeframe=resample_timeframe, start_date=start_date)
+        df = self.exchange.GetPairKlines(pair=pair, timeframe=resample_timeframe, start_date=start_date)
 
         # # Obsolete
         # # Re-sample the data to a different timeframe (better for plotting)
@@ -322,15 +320,15 @@ class Dashboard:
 
         # Compute the indicators
         if 'plot_indicators' in indicators:
-            strategy.find_signal(df=df)     # We don't need the signal, the function is just computing the indicators used in the strategy
+            self.strategy.find_signal(df=df)     # We don't need the signal, the function is just computing the indicators used in the strategy
             # Plot the indicators on this pair
             for colname in df.columns[6:]:
-                fig.add_trace(go.Scatter(x    = df['time'],
-                                         y    = df[colname],
+                fig.add_trace(go.Scatter(x    = df['time'].loc[-20:],
+                                         y    = df[colname].loc[-20:],
                                          name = colname))
 
         # Get the all the orders we did on this pair
-        orders = database.GetOrdersOfBot(pair=pair)
+        orders = self.database.GetOrdersOfBot(pair=pair)
         buys  = None
         sells = None
 
@@ -403,16 +401,16 @@ class Dashboard:
         # Prepare the bootstrap layout for the stats on the pair and the graph
 
         # Check if the bot sold at least one time and adapt what's displayed
-        if len(list(database.GetOrdersOfBot(pair))) > 1:
-            profit = f"{dict(database.GetBot(pair=pair))['bot_profit']} {bot['quoteasset']}"
+        if len(list(self.database.GetOrdersOfBot(pair))) > 1:
+            profit = f"{dict(self.database.GetBot(pair=pair))['bot_profit']} {bot['quoteasset']}"
 
             profit_minus_fees = "{profit_minus_fees} {quoteasset}".format(quoteasset        = bot['quoteasset'],
-                                                                          profit_minus_fees = dict(database.GetBot(pair=pair))['bot_profit_minus_fees'])
+                                                                          profit_minus_fees = dict(self.database.GetBot(pair=pair))['bot_profit_minus_fees'])
 
-            average_hold_duration_string = "{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = helpers.pair_average_hold_duration(pair).days,
-                                                                                               hours      = helpers.pair_average_hold_duration(pair).days * 24 + helpers.pair_average_hold_duration(pair).seconds // 3600,
-                                                                                               minutes    = (helpers.pair_average_hold_duration(pair).seconds % 3600) // 60,
-                                                                                               seconds    = helpers.pair_average_hold_duration(pair).seconds % 60)
+            average_hold_duration_string = "{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.pair_average_hold_duration(pair).days,
+                                                                                               hours      = self.helpers.pair_average_hold_duration(pair).days * 24 + self.helpers.pair_average_hold_duration(pair).seconds // 3600,
+                                                                                               minutes    = (self.helpers.pair_average_hold_duration(pair).seconds % 3600) // 60,
+                                                                                               seconds    = self.helpers.pair_average_hold_duration(pair).seconds % 60)
         else:
             profit                       = "Didn't sell yet"
             profit_minus_fees            = "Didn't sell yet"
@@ -441,11 +439,11 @@ class Dashboard:
                             [
                                 html.Tr([html.Td("Plot Timeframe"),         html.Td(resample_timeframe, style={'color':'#a3a7b0'})]),
 
-                                html.Tr([html.Td("Bot Timeframe"),          html.Td(bot['timeframe'].replace("m", "Min"), style={'color':'#a3a7b0'})]),
+                                html.Tr([html.Td("Bot Timeframe"),          html.Td(bot['timeframe'], style={'color':'#a3a7b0'})]),
 
-                                html.Tr([html.Td("Strategy"),               html.Td(strategy.name, style={'color':'#a3a7b0'})]),
+                                html.Tr([html.Td("Strategy"),               html.Td(self.strategy.name, style={'color':'#a3a7b0'})]),
 
-                                html.Tr([html.Td("All orders"),             html.Td("{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(database.GetOrdersOfBot(pair))), recent_orders=helpers.pair_recent_orders(pair)), style={'color':'#a3a7b0'})]),
+                                html.Tr([html.Td("All orders"),             html.Td("{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.GetOrdersOfBot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)), style={'color':'#a3a7b0'})]),
 
                                 html.Tr([html.Td("Displayed orders"),       html.Td(displayed_trades, style={'color':'#a3a7b0'})]),
                             ]
@@ -463,8 +461,8 @@ class Dashboard:
                             html.Tr([html.Td("Profit"),                 html.Td(profit, style={'color':'#a3a7b0'})]),
 
                             html.Tr([html.Td("Fees"),                   html.Td("{fees_in_quote} {quoteasset} ({fees_in_BNB} BNB)".format(quoteasset    = bot['quoteasset'],
-                                                                                                                                          fees_in_quote = dict(database.GetBot(pair=pair))['bot_quote_fees'],
-                                                                                                                                          fees_in_BNB   = dict(database.GetBot(pair=pair))['bot_BNB_fees']), style={'color':'#a3a7b0'})]),
+                                                                                                                                          fees_in_quote = dict(self.database.GetBot(pair=pair))['bot_quote_fees'],
+                                                                                                                                          fees_in_BNB   = dict(self.database.GetBot(pair=pair))['bot_BNB_fees']), style={'color':'#a3a7b0'})]),
                             html.Tr([html.Td("Profit - Fees"),          html.Td(profit_minus_fees, style={'color':'#a3a7b0'})]),
 
                             html.Tr([html.Td("Average hold duration"),  html.Td(average_hold_duration_string, style={'color':'#a3a7b0'})]),
@@ -492,9 +490,8 @@ class Dashboard:
 
     # CALLBACKS ____________________________________________________________________________________
     # Update the pairs' dropdown menu based on the selected quote
-    @staticmethod
-    def update_pair_dropdown(input_quote):
-        pairs_list = [dict(bot)['pair'] for bot in database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if input_quote in dict(bot)['pair']]
+    def update_pair_dropdown(self, input_quote):
+        pairs_list = [dict(bot)['pair'] for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if input_quote in dict(bot)['pair']]
         sorted_pairs_list = sorted(pairs_list)
         options = [{'label': pair, 'value': pair} for pair in sorted_pairs_list]
         value   = ''                        # No default
@@ -503,7 +500,7 @@ class Dashboard:
     # Update the data to display for the pair
     def plot_pair_data(self, input_pair, input_timeframe, input_duration, input_inds):
         if input_pair:
-            h = self.plot_bot_history(bot                = dict(database.GetBot(input_pair)),
+            h = self.plot_bot_history(bot                = dict(self.database.GetBot(input_pair)),
                                       resample_timeframe = input_timeframe,
                                       nb_last_trades     = input_duration,
                                       indicators         = input_inds)
@@ -522,5 +519,4 @@ class Dashboard:
 
 
 if __name__ == "__main__":
-    dashboard = Dashboard()
-    dashboard.app.run_server(debug=True)
+    Dashboard(paper_trading=True).app.run_server(debug=True)

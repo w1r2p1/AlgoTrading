@@ -27,6 +27,7 @@ class BotDatabase:
 			status					text,
 			quoteBalance			text,
 			baseBalance				text,
+			quote_lockedintrades    text,
 			last_order_date			text,
 			last_profit 			text,
 			bot_profit	 			text,
@@ -91,7 +92,7 @@ class BotDatabase:
 
 		values = tuple(param for param in bot_params.values())
 
-		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
+		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
 		conn.commit()
 
 
@@ -138,6 +139,9 @@ class BotDatabase:
 
 		if 'baseBalance' in kwargs:
 			c.execute('UPDATE bots SET baseBalance = ? WHERE pair = ?', (kwargs['baseBalance'], pair))
+
+		if 'quote_lockedintrades' in kwargs:
+			c.execute('UPDATE bots SET quote_lockedintrades = ? WHERE pair = ?', (kwargs['quote_lockedintrades'], pair))
 
 		if 'last_order_date' in kwargs:
 			c.execute('UPDATE bots SET last_order_date = ? WHERE pair = ?', (kwargs['last_order_date'], pair))

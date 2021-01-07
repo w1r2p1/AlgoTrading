@@ -22,7 +22,7 @@ from freezegun import freeze_time
 
 # --------------------------------------
 # # Clear file database.db
-# with open('assets/database_paper.db', "w"):
+# with open('assets/database_live.db', "w"):
 #     pass
 # --------------------------------------
 
@@ -521,14 +521,14 @@ class Trading:
                 print(f'\tError in processing a {"test" if self.paper_trading else ""} sell order on {pair}. Error : {e}.')
 
 
-    def send_text_to_telegram(self, bot_message):
+    def send_text_to_telegram(self, message):
 
-        send_text  = f'https://api.telegram.org/bot{self.bot_token}/sendMessage?chat_id={self.bot_chatID}&parse_mode=Markdown&text={bot_message}'
+        send_text  = f'https://api.telegram.org/bot{self.bot_token}/sendMessage?chat_id={self.bot_chatID}&parse_mode=Markdown&text={message}'
         response = requests.get(send_text)
         return response.json()
 
 
-    def set_pairs_to_trade_on(self)->bool:
+    def set_pairs_to_trade_on(self):
         """ Gets the name of the pairs that we will be trading on
             and set the corresponding bots as active, if enough money in account. """
 
@@ -570,8 +570,8 @@ class Trading:
                     if open_positions[quoteasset]:
                         print(f"(using {open_positions[quoteasset]} which {'is' if len(open_positions[quoteasset])==1 else 'are'} still trying to sell.)")
                     print("- {quoteasset} balance : {quoteasset_balance} {quoteasset}. Each new bot is given {balance} {quoteasset} to trade and has been set as active.".format(quoteasset_balance = account_balance[quoteasset].normalize(),
-                                                                                                                                                                               balance            = format(round(allocation, 8), 'f'),
-                                                                                                                                                                               quoteasset         = quoteasset))
+                                                                                                                                                                                 balance            = format(round(allocation, 8), 'f'),
+                                                                                                                                                                                 quoteasset         = quoteasset))
                     # Set the bots as active
                     for pair in trading_pairs[quoteasset]:
                         if pair not in open_positions[quoteasset]:
@@ -581,17 +581,16 @@ class Trading:
 
                 else:
                     print("- {quoteasset} balance : {balance} {quoteasset}. Not enough to trade on {nbpairs} pairs. Minimum amount (not including fees) required : {min_amount}{quoteasset}.".format(balance    = account_balance[quoteasset].normalize(),
-                                                                                                                                                                                                   nbpairs    = len(trading_pairs[quoteasset])-len(open_positions[quoteasset]),
-                                                                                                                                                                                                   quoteasset = quoteasset,
-                                                                                                                                                                                                   min_amount = min_amount.normalize()))
+                                                                                                                                                                                                     nbpairs    = len(trading_pairs[quoteasset])-len(open_positions[quoteasset]),
+                                                                                                                                                                                                     quoteasset = quoteasset,
+                                                                                                                                                                                                     min_amount = min_amount.normalize()))
             else:
                 # If we already have the max number of bots, do nothing
                 sp.stop()
                 print(f"- {quoteasset} : No room left for new bots. Trading on {open_positions[quoteasset]}, which are still trying to sell.")
 
-        if not [bot["status"] for bot in self.database.GetAllBots()]:
-            print("\nYou can't trade on any quoteAsset. Please change the starting balance and try again ! \n_________________________________________________________________________________________________________________________")
-            return False
+        if set([bot["status"] for bot in self.database.GetAllBots()]) == {''}:
+            sys.exit("\nYou can't trade on any quoteAsset. Please update the starting balance and try again.")
 
 
     def wait_for_candle(self)->bool:
@@ -735,10 +734,10 @@ class Trading:
 
 if __name__ == "__main__":
 
-    trading = Trading(paper_trading      = True,
+    trading = Trading(paper_trading      = False,
                       timeframe          = '1m',
-                      quotes_to_trade_on = ['BTC'],
-                      bots_per_quote     = 5,
+                      quotes_to_trade_on = ['ETH'],
+                      bots_per_quote     = 2,
                       send_to_telegram   = False,
                       )
 

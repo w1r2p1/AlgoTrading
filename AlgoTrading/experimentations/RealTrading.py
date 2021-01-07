@@ -446,7 +446,7 @@ class RealTrading:
         sp.color = 'green'
         exchange = self.exchange
         database = self.database
-        BotsPerQuoteAsset = Settings.parameters['BotsPerQuoteAsset']
+        BotsPerQuoteAsset = Settings.parameters['bots_per_quote']
 
         trading_pairs = dict()
         sorted_pairs    = dict()

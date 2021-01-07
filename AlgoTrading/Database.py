@@ -65,7 +65,8 @@ class BotDatabase:
 			profit_minus_fees		text,
 			time_to_fill			text,
 			hold_duration			text,
-			timeInForce 			bool 
+			timeInForce 			bool,
+			liquidate_position		bool
 			)''')
 
 		c.execute('''CREATE TABLE IF NOT EXISTS account_balances (
@@ -117,7 +118,7 @@ class BotDatabase:
 			c.execute('SELECT * FROM bots')
 			all_bots = c.fetchall()
 			return all_bots								# list(all_bots) = [<sqlite3.Row object at 0x000001BB27302FD0>, <sqlite3.Row object at 0x000001BB27302CB0>,...]
-														# [{botname:'bot_LTCBTC', pair:'LTCBTC, 'is_active'=True, ...}, {botname:'bot_ETHBTC', pair:'ETHBTC, 'is_active'=True, ...}]
+														# [{pair:'LTCBTC', 'is_active'=True, ...}, {pair:'ETHBTC, 'is_active'=True, ...}]
 
 		except Exception as e:
 			print(e)
@@ -210,7 +211,7 @@ class BotDatabase:
 
 
 	""" ORDERS """
-	def SaveOrder(self, quoteasset:str, order_result:dict, hold_duration:str, profit:str, quote_fee:str, BNB_fee:str, profit_minus_fees:str, time_to_fill:str):
+	def SaveOrder(self, quoteasset:str, order_result:dict, hold_duration:str, profit:str, quote_fee:str, BNB_fee:str, profit_minus_fees:str, time_to_fill:str, **kwargs):
 		""" Saves an order to the Database. """
 
 		if order_result:
@@ -238,9 +239,10 @@ class BotDatabase:
 					  profit_minus_fees,
 					  time_to_fill,
 					  hold_duration,
-					  order_result['timeInForce'])
+					  order_result['timeInForce'],
+					  kwargs.get('liquidate_position', False))
 
-			c.execute('INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
+			c.execute('INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
 			conn.commit()
 
 

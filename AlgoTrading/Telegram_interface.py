@@ -18,7 +18,7 @@ class TelegramInterface:
         self.helpers  = HelperMethods(database=self.database)
 
         # Get the quotes in the database
-        unsorted_existing_quoteassets = [dict(bot)['quoteasset'] for bot in self.database.GetAllBots()]
+        unsorted_existing_quoteassets = [dict(bot)['quote'] for bot in self.database.GetAllBots()]
         self.existing_quoteassets = list(set(sorted(unsorted_existing_quoteassets)))                       # ['BTC', 'ETH']
 
         # Define a pattern to look for when clicking on a button
@@ -86,8 +86,8 @@ class TelegramInterface:
 
     def select_base_menu_keyboard(self, quote:str):
 
-        pairs_ = sorted([dict(bot)['pair'] for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if dict(bot)['quoteasset']==quote])
-        bases_ = sorted([dict(bot)['pair'].replace(quote, '') for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if dict(bot)['quoteasset']==quote])
+        pairs_ = sorted([dict(bot)['pair'] for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if dict(bot)['quote']==quote])
+        bases_ = sorted([dict(bot)['pair'].replace(quote, '') for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if dict(bot)['quote']==quote])
 
         # Use bases_ for the display, pairs_ for the callback_data
         all_base_buttons = [InlineKeyboardButton(base, callback_data=pair) for base, pair in zip(bases_, pairs_)]
@@ -119,20 +119,20 @@ class TelegramInterface:
     
     All orders   = """ + "{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quote), recent_orders=self.helpers.recent_orders(quote)) + """
     Open orders  = """ + str(self.helpers.open_orders(quote))  + """
-    Binance bal. = """ + str(self.exchange.GetAccountBalance(quote))  + """ """ + quote + """
-    Intern bal.  = """ + str(self.database.GetAccountBalance(quote, real_or_internal='internal'))  + """ """ + quote + """
+    Binance bal. = """ + str(self.exchange.GetAccountBalance(quote).get('free'))  + """ """ + quote + """
+    Intern bal.  = """ + str(self.database.get_db_account_balance(quote, internal_balance=True))  + """ """ + quote + """
     Profit       = """ + """{profit_in_quote} {quoteasset}
                    ({profit_in_percentage}%)""".format(quoteasset           = quote,
-                                                       profit_in_quote      = self.database.get_profit(quote, 'internal'),
-                                                       profit_in_percentage = format(round(Decimal(self.database.get_profit(quote, 'internal'))/Decimal(self.database.GetStartBalance(quote))*100, 2), 'f')) + """
+                                                       profit_in_quote      = self.database.get_db_account_balance(quote, internal_profit=True),
+                                                       profit_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit=True))/Decimal(self.database.get_db_account_balance(quote, started_with=True))*100, 2), 'f')) + """
     Fees         = """ + """{fees_in_quote} {quoteasset}
                    ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
-                                                 fees_in_quote = self.database.GetQuoteFees(quote),
-                                                 fees_in_BNB   = format(round(Decimal(self.database.GetBNBFees(quote)), 3), 'f')) + """ 
+                                                 fees_in_quote = self.database.get_db_account_balance(quote, internal_quote_fees=True),
+                                                 fees_in_BNB   = format(round(Decimal(self.database.get_db_account_balance(quote, internal_BNB_fees=True)), 3), 'f')) + """ 
     Profit-Fees  = """ + """{profit_minus_fees_in_quote} {quoteasset}
                    ({profit_minus_fees_in_quote_in_percentage}%)""".format(quoteasset                 = quote,
-                                                                           profit_minus_fees_in_quote = self.database.GetProfit_minus_fees(quote),
-                                                                           profit_minus_fees_in_quote_in_percentage = format(round(Decimal(self.database.GetProfit_minus_fees(quote))/Decimal(self.database.GetStartBalance(quoteasset=quote))*100, 2), 'f')) + """
+                                                                           profit_minus_fees_in_quote = self.database.get_db_account_balance(quote, internal_profit_minus_fees=True),
+                                                                           profit_minus_fees_in_quote_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit_minus_fees=True))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))*100, 2), 'f')) + """
     Hold dur.    = """ + """{days}d, {hours}h, {minutes}m, {seconds}s""".format(days       = self.helpers.quote_average_hold_duration(quote).days,
                                                                                 hours      = self.helpers.quote_average_hold_duration(quote).days * 24 + self.helpers.quote_average_hold_duration(quote).seconds // 3600,
                                                                                 minutes    = (self.helpers.quote_average_hold_duration(quote).seconds % 3600) // 60,

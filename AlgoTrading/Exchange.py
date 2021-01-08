@@ -135,7 +135,7 @@ class Binance:
 			print("Could not find time from Binance.")
 
 
-	def GetNameOfPairs_WithQuoteasset(self, quoteAssets:list=None) -> dict:
+	def GetNameOfPairs_WithQuoteasset(self, quotes:list=None) -> dict:
 		""" Gets just the name the of pairs which have their quoteasset in 'quoteAssets',  tradable or not.
 			-> # {'BTC':['ETHBTC', 'LTCBTC',...], 'ETH':[]} """
 
@@ -147,12 +147,12 @@ class Binance:
 
 		pairs_with_quoteassets = dict()
 
-		for quoteAsset in quoteAssets:
+		for quote in quotes:
 			pairs_list = []
 			for pair in data['symbols']:
-				if pair['quoteAsset'] in quoteAsset:
+				if pair['quoteAsset'] in quote:
 					pairs_list.append(pair['symbol'])
-			pairs_with_quoteassets[quoteAsset] = pairs_list
+			pairs_with_quoteassets[quote] = pairs_list
 
 		return pairs_with_quoteassets			# {'BTC':['ETHBTC', 'LTCBTC',...], 'ETH':[]}
 
@@ -204,17 +204,17 @@ class Binance:
 		return account		# dict of all the data about the account : {'makerCommission': 10, 'takerCommission': 10, ...., 'balances': []}
 
 
-	def GetAccountBalance(self, quoteasset:str)->str:
+	def GetAccountBalance(self, quote:str):
 
 		account_data = self.GetAccountData()
 
 		if account_data == {}:
-			return "Could not get account data on " + quoteasset + " from Binance."
+			return f"Could not get account data on {quote} from Binance."
 
 		balances = account_data['balances']
 		for balance in balances:
-			if balance['asset'] in quoteasset:
-				return balance['free']
+			if balance['asset'] in quote:
+				return balance
 
 
 	def GetPairKlines(self, pair:str, timeframe:str, **kwargs):
@@ -485,8 +485,14 @@ class Binance:
 		tickSize = Decimal(pr_filter['tickSize'])
 
 
-		if minPrice <= price <= maxPrice and (price-minPrice) % tickSize == 0:
-			return price
+		if minPrice <= price <= maxPrice:
+			if (price-minPrice) % tickSize == 0:
+				# Round down to the nearest tickSize and remove zeros after
+				newPrice = price // tickSize * tickSize
+				# print("Attention on {pair} : the price {price} is incorrect and has been rounded to {newPrice}".format(pair=pair, price=price, newPrice=newPrice))
+				return newPrice
+			else:
+				return price
 
 		if price < minPrice:
 			# print("Attention on {pair} : the price {price} is too low and has been set to {minPrice}".format(pair=pair, price=price, minPrice=minPrice))
@@ -495,12 +501,6 @@ class Binance:
 		if price > maxPrice:
 			# print("Attention on {pair} : the price {price} is too high and has been set to {maxPrice}".format(pair=pair, price=price, maxPrice=maxPrice))
 			return maxPrice
-
-		if (price-minPrice) % tickSize != 0:
-			# Round down to the nearest tickSize and remove zeros after
-			newPrice = price // tickSize * tickSize
-			# print("Attention on {pair} : the price {price} is incorrect and has been rounded to {newPrice}".format(pair=pair, price=price, newPrice=newPrice))
-			return newPrice
 
 
 	def RoundToValidQuantity(self, pair:str, quantity:Decimal)->Decimal:
@@ -533,17 +533,16 @@ class Binance:
 		maxQty   = Decimal(pr_filter['maxQty'])
 		stepSize = Decimal(pr_filter['stepSize'])
 
-		if minQty <= quantity <= maxQty and (quantity-minQty) % stepSize == 0:
-			return quantity
+		if minQty <= quantity <= maxQty:
+			if (quantity-minQty) % stepSize != 0:
+				# Round down to the nearest stepSize and remove zeros after
+				newQuantity = quantity // stepSize * stepSize
+				return newQuantity
+			else:
+				return quantity
 
 		if quantity < minQty:
 			return minQty
 
 		if quantity > maxQty:
 			return maxQty
-
-		if (quantity-minQty) % stepSize != 0:
-			# Round down to the nearest stepSize and remove zeros after
-			newQuantity = quantity // stepSize * stepSize
-			# print("Attention on {pair} : the quantity {price} is incorrect and has been rounded to {newPrice}".format(pair=pair, price=quantity, newPrice=newQuantity))
-			return newQuantity

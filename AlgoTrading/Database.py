@@ -6,8 +6,6 @@ from datetime import datetime
 class BotDatabase:
 
 	def __init__(self, name:str):
-		# sqlite3.register_adapter(Decimal, DecimalToString)          	# Decimal type converted to string before being written to the db.
-		# sqlite3.register_converter("decimal", convert_to_decimal)		# bytestring from the database into a custom Python type
 		self.name = name
 		self.initialise()
 
@@ -22,12 +20,13 @@ class BotDatabase:
 		# Create tables
 		c.execute('''CREATE TABLE IF NOT EXISTS bots (
 			pair					text primary key,
-			quoteasset 				text,
+			quote 					text,
 			timeframe 				text,
 			status					text,
-			quoteBalance			text,
-			baseBalance				text,
-			quote_lockedintrades    text,
+			quote_allocation		text,
+			base_balance			text,
+			quote_lockedintrade     text,
+			base_value_in_quote		text,
 			last_order_date			text,
 			last_profit 			text,
 			bot_profit	 			text,
@@ -48,7 +47,7 @@ class BotDatabase:
 		c.execute('''CREATE TABLE IF NOT EXISTS orders (
 			orderId 				text primary key,
 			pair 					text,
-			quoteasset				text,
+			quote					text,
 			side 					text,
 			order_type				text,
 			status 					text,
@@ -70,11 +69,12 @@ class BotDatabase:
 			)''')
 
 		c.execute('''CREATE TABLE IF NOT EXISTS account_balances (
-			quoteasset 						text,
+			quote 							text,
 			started_with					text,
-			real_quote_balance 				text,
-			real_profit						text,
-			internal_quote_balance			text,
+			real_balance 					text,
+			real_locked 					text,
+			internal_balance				text,
+			internal_locked					text,
 			internal_profit					text,
 			internal_quote_fees             text,
 			internal_BNB_fees				text,
@@ -84,7 +84,7 @@ class BotDatabase:
 		conn.commit()
 
 
-	""" BOTS """
+	""" BOTS --------------------------------------------------------------- """
 	def SaveBot(self, bot_params:dict):
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -93,7 +93,7 @@ class BotDatabase:
 
 		values = tuple(param for param in bot_params.values())
 
-		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
+		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
 		conn.commit()
 
 
@@ -135,14 +135,17 @@ class BotDatabase:
 		if 'status' in kwargs:
 			c.execute('UPDATE bots SET status = ? WHERE pair = ?', (kwargs['status'], pair))
 
-		if 'quoteBalance' in kwargs:
-			c.execute('UPDATE bots SET quoteBalance = ? WHERE pair = ?', (kwargs['quoteBalance'], pair))
+		if 'quote_allocation' in kwargs:
+			c.execute('UPDATE bots SET quote_allocation = ? WHERE pair = ?', (kwargs['quote_allocation'], pair))
 
-		if 'baseBalance' in kwargs:
-			c.execute('UPDATE bots SET baseBalance = ? WHERE pair = ?', (kwargs['baseBalance'], pair))
+		if 'base_balance' in kwargs:
+			c.execute('UPDATE bots SET base_balance = ? WHERE pair = ?', (kwargs['base_balance'], pair))
 
-		if 'quote_lockedintrades' in kwargs:
-			c.execute('UPDATE bots SET quote_lockedintrades = ? WHERE pair = ?', (kwargs['quote_lockedintrades'], pair))
+		if 'quote_lockedintrade' in kwargs:
+			c.execute('UPDATE bots SET quote_lockedintrade = ? WHERE pair = ?', (kwargs['quote_lockedintrade'], pair))
+
+		if 'base_value_in_quote' in kwargs:
+			c.execute('UPDATE bots SET base_value_in_quote = ? WHERE pair = ?', (kwargs['base_value_in_quote'], pair))
 
 		if 'last_order_date' in kwargs:
 			c.execute('UPDATE bots SET last_order_date = ? WHERE pair = ?', (kwargs['last_order_date'], pair))
@@ -186,32 +189,32 @@ class BotDatabase:
 		conn.commit()
 
 
-	def DeleteBots(self, quoteasset:str):
-		""" Deletes all the bots in the database on a given quoteasset. """
+	def DeleteBots(self, quote:str):
+		""" Deletes all the bots in the database on a given quote. """
 
-		if quoteasset:
+		if quote:
 			conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 			conn.row_factory = sqlite3.Row
 			c 				 = conn.cursor()
 
-			# Check if bots exist on the quoteasset
-			c.execute('SELECT * FROM bots WHERE quoteasset=?', (quoteasset, ))
+			# Check if bots exist on the quote
+			c.execute('SELECT * FROM bots WHERE quote=?', (quote, ))
 			details = c.fetchall()
 
 			if details:
 				for item in details:
 					if 'Looking to exit' in dict(item)['status']:
-						answer = input("You have open position(s) on " + quoteasset + ", are you sure you want to delete its records ?")
+						answer = input(f"You have open position(s) on {quote}, are you sure you want to delete its records ?")
 						if answer == 'n':
 							return
-				c.execute('DELETE FROM bots WHERE quoteasset=?', (quoteasset, ))
+				c.execute('DELETE FROM bots WHERE quote=?', (quote, ))
 				conn.commit()
-				print("Deleted all records of " + quoteasset + ".")
+				print(f"Deleted all records of {quote}.")
 
 
 
-	""" ORDERS """
-	def SaveOrder(self, quoteasset:str, order_result:dict, hold_duration:str, profit:str, quote_fee:str, BNB_fee:str, profit_minus_fees:str, time_to_fill:str, **kwargs):
+	""" ORDERS ------------------------------------------------------------- """
+	def SaveOrder(self, quote:str, order_result:dict, hold_duration:str, profit:str, quote_fee:str, BNB_fee:str, profit_minus_fees:str, time_to_fill:str, **kwargs):
 		""" Saves an order to the Database. """
 
 		if order_result:
@@ -222,7 +225,7 @@ class BotDatabase:
 			# values = tuple(param for param in order_result.values())
 			values = (order_result['orderId'],
 					  order_result['symbol'],
-					  quoteasset,
+					  quote,
 					  order_result['side'],
 					  order_result['type'],
 					  order_result['status'],
@@ -260,27 +263,27 @@ class BotDatabase:
 		return orders                           	# We need to return None if there is no bot on the pair, so no dict(orders)
 
 
-	def get_quote_orders(self, quoteasset:str):
-		""" Gets all the orders we have made on a quoteasset"""
+	def get_quote_orders(self, quote:str):
+		""" Gets all the orders we have made on a quote"""
 
 		conn             = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
 		c                = conn.cursor()
 
-		c.execute('SELECT * FROM orders WHERE quoteasset=?', (quoteasset, ))
+		c.execute('SELECT * FROM orders WHERE quote=?', (quote, ))
 		orders = c.fetchall()
 													# list(orders) = [<sqlite3.Row object at 0x0000020664E28670>, <sqlite3.Row object at 0x0000020664E9BA70>, ...]
 		return orders                           	# We need to return None if there is no bot on the pair, so no dict(orders)
 
 
-	def GetOpenBots(self, quoteasset:str):
+	def GetOpenBots(self, quote:str):
 		""" Gets all the orders made on a pair """
 
 		conn             = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
 		c                = conn.cursor()
 
-		c.execute('SELECT * FROM bots WHERE quoteasset=? AND status = "Looking to exit"', (quoteasset, ))
+		c.execute('SELECT * FROM bots WHERE quote=? AND status = "Looking to exit"', (quote, ))
 		openBots = c.fetchall()
 													# list(openBots) = [<sqlite3.Row object at 0x0000020664E28670>, <sqlite3.Row object at 0x0000020664E9BA70>, ...]
 													# dict(openBots) = {'pair': 'STORMETH', 'side': 'BUY',...}
@@ -289,147 +292,114 @@ class BotDatabase:
 
 
 
-	""" BALANCES """
-	def InitiateAccountBalance(self, quoteasset:str, started_with:str, real_quote_balance:str, internal_quote_balance:str):
-		""" Creates an account balance for a quoteasset. """
+	""" BALANCES ------------------------------------------------------------ """
+	def initiate_db_account_balances(self, quote:str, started_with:str, real_balance:str, internal_balance:str):
+		""" Creates an account balance for a quote. """
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
 		c 				 = conn.cursor()
 
-		values = (quoteasset,
+		values = (quote,
 				  started_with,
-				  real_quote_balance,
+				  real_balance,
 				  '0',
-				  internal_quote_balance,
-				  '0',
-				  '0',
+				  internal_balance,
 				  '0',
 				  '0',
-				  quoteasset)
+				  '0',
+				  '0',
+				  '0',
+				  quote)
 		# Insert a row for the quoreasset only if doesn't already exist
-		c.execute('INSERT INTO account_balances SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT * FROM account_balances WHERE quoteasset=?)', values)
+		c.execute('INSERT INTO account_balances SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT * FROM account_balances WHERE quote=?)', values)
 
 		conn.commit()
 
 
-	def UpdateAccountBalance(self,
-							 quoteasset:str,
-							 real_quote_balance:str,
-							 real_profit:str,
-							 internal_quote_balance:str,
-							 internal_profit:str,
-							 internal_quote_fees:str,
-							 internal_BNB_fees:str,
-							 internal_profit_minus_fees:str,
-							 quoteAssetPrecision:int,
-							 BNB_Precision:int):
-		""" Updates the internal & real balances of each quoteasset. """
+	def update_db_account_balances(self,
+								   quote:str,
+								   real_balance:str,
+								   real_locked:str,
+								   internal_balance:str,
+								   internal_locked:str,
+								   internal_profit:str,
+								   internal_quote_fees:str,
+								   internal_BNB_fees:str,
+								   internal_profit_minus_fees:str,
+								   quoteAssetPrecision:int,
+								   BNB_Precision:int):
+		""" Updates the internal & real balances of each quote. """
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
 		c 				 = conn.cursor()
 
 		# Get the current balance in the db
-		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
+		c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
 		accountBalance 	 	  = c.fetchone()
-		int_balance 		  = dict(accountBalance)['internal_quote_balance']
+		int_balance 		  = dict(accountBalance)['internal_balance']
+		int_locked 		  	  = dict(accountBalance)['internal_locked']
 		int_profit   		  = dict(accountBalance)['internal_profit']
 		int_quote_fees 	  	  = dict(accountBalance)['internal_quote_fees']
 		int_BNB_fees 		  = dict(accountBalance)['internal_BNB_fees']
 		int_profit_minus_fees = dict(accountBalance)['internal_profit_minus_fees']
 
-		values = (real_quote_balance,
-				  real_profit,
-				  format(round(Decimal(int_balance) + Decimal(internal_quote_balance), quoteAssetPrecision), 'f'),
-				  format(round(Decimal(int_profit) + Decimal(internal_profit),         quoteAssetPrecision), 'f'),
+		values = (real_balance,
+				  real_locked,
+				  format(round(Decimal(int_balance) + Decimal(internal_balance), quoteAssetPrecision), 'f'),
+				  format(round(Decimal(int_locked)  + Decimal(internal_locked),  quoteAssetPrecision), 'f'),
+				  format(round(Decimal(int_profit)  + Decimal(internal_profit),  quoteAssetPrecision), 'f'),
 				  format(round(Decimal(int_quote_fees) + Decimal(internal_quote_fees), quoteAssetPrecision), 'f'),
-				  format(round(Decimal(int_BNB_fees)   + Decimal(internal_BNB_fees),   BNB_Precision),       'f'),
+				  format(round(Decimal(int_BNB_fees)   + Decimal(internal_BNB_fees),   BNB_Precision), 'f'),
 				  format(round(Decimal(int_profit_minus_fees) + Decimal(internal_profit_minus_fees), quoteAssetPrecision), 'f'),
-				  quoteasset)
+				  quote)
 
-		c.execute('UPDATE account_balances SET real_quote_balance = ?,'
-				  							  'real_profit = ?,'
-										      'internal_quote_balance = ?,'
+		c.execute('UPDATE account_balances SET real_balance = ?,'
+				  							  'real_locked = ?,'
+										      'internal_balance = ?,'
+										      'internal_locked = ?,'
 										      'internal_profit = ?,'
 										  	  'internal_quote_fees = ?,'
 										 	  'internal_BNB_fees = ?,'
 										 	  'internal_profit_minus_fees = ?'
-				  'WHERE quoteasset = ?', values)
+				  'WHERE quote = ?', values)
 
 		conn.commit()
 
 
-	def GetAccountBalance(self, quoteasset:str, real_or_internal:str)->str:
+	def get_db_account_balance(self, quote:str, **kwargs)->str:
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
 		c 				 = conn.cursor()
 
-		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
+		c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
 		balance = c.fetchone()
 
-		if real_or_internal == 'real':
-			return dict(balance)['real_quote_balance']				# '2.50000000'
-		elif real_or_internal == 'internal':
-			return dict(balance)['internal_quote_balance']			# '2.50000000'
+		if kwargs.get('started_with', False):
+			return dict(balance)['started_with']
 
+		if kwargs.get('real_balance', False):
+			return dict(balance)['real_balance']
 
-	def get_profit(self, quoteasset:str, real_or_internal:str)->str:
+		if kwargs.get('real_locked', False):
+			return dict(balance)['real_locked']
 
-		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-		conn.row_factory = sqlite3.Row
-		c 				 = conn.cursor()
+		if kwargs.get('internal_balance', False):
+			return dict(balance)['internal_balance']
 
-		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
-		balance = c.fetchone()
+		if kwargs.get('internal_locked', False):
+			return dict(balance)['internal_locked']
 
-		return dict(balance)[f'{real_or_internal}_profit']				# '2.50000000'
+		if kwargs.get('internal_profit', False):
+			return dict(balance)['internal_profit']
 
+		if kwargs.get('internal_quote_fees', False):
+			return dict(balance)['internal_quote_fees']
 
-	def GetQuoteFees(self, quoteasset:str)->str:
+		if kwargs.get('internal_BNB_fees', False):
+			return dict(balance)['internal_BNB_fees']
 
-		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-		conn.row_factory = sqlite3.Row
-		c 				 = conn.cursor()
-
-		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
-		balance = c.fetchone()
-
-		return dict(balance)['internal_quote_fees']				# '2.50000000'
-
-
-	def GetBNBFees(self, quoteasset:str)->str:
-
-		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-		conn.row_factory = sqlite3.Row
-		c 				 = conn.cursor()
-
-		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
-		balance = c.fetchone()
-
-		return dict(balance)['internal_BNB_fees']				# '2.50000000'
-
-
-	def GetProfit_minus_fees(self, quoteasset:str)->str:
-
-		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-		conn.row_factory = sqlite3.Row
-		c 				 = conn.cursor()
-
-		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
-		balance = c.fetchone()
-
-		return dict(balance)['internal_profit_minus_fees']				# '2.50000000'
-
-
-	def GetStartBalance(self, quoteasset:str)->str:
-
-		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
-		conn.row_factory = sqlite3.Row
-		c 				 = conn.cursor()
-
-		c.execute('SELECT * FROM account_balances WHERE quoteasset = ?', (quoteasset, ))
-		balance = c.fetchone()
-
-		return dict(balance)['started_with']				# '2.50000000'
+		if kwargs.get('internal_profit_minus_fees', False):
+			return dict(balance)['internal_profit_minus_fees']

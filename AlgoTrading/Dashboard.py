@@ -26,7 +26,7 @@ class Dashboard:
         self.database = BotDatabase(name="assets/database_paper.db") if self.paper_trading else BotDatabase(name="assets/database_live.db")
         self.helpers  = HelperMethods(database=self.database)
         self.strategy = Strategy(name='SSF_Crossover')
-        self.existing_quoteassets = set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()])       # ['ETH', 'BTC']
+        self.existing_quoteassets = set([dict(bot)['quote'] for bot in self.database.GetAllBots()])       # ['ETH', 'BTC']
 
         self.app = dash.Dash(__name__,
                              external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -42,39 +42,39 @@ class Dashboard:
 
                 html.Hr(),
 
-                # Loop through the quoteassets and print their stats
+                # Loop through the quotes and print their stats
                 html.Div([html.Div(
                                 [
-                                    dbc.Row(dbc.Col(html.H3(quoteasset + " statistics"))),
+                                    dbc.Row(dbc.Col(html.H3(quote + " statistics"))),
                                     dbc.Row([
                                             dbc.Col(width=1),
                                             dbc.Col(dbc.Table(
                                                                 [
                                                                     html.Tbody(
                                                                         [
-                                                                            html.Tr([html.Td("All orders"),              html.Td("{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quoteasset), recent_orders=self.helpers.recent_orders(quoteasset)), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("All orders"),              html.Td("{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quote), recent_orders=self.helpers.recent_orders(quote)), style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Open orders"),             html.Td(self.helpers.open_orders(quoteasset), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Open orders"),             html.Td(self.helpers.open_orders(quote), style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Binance balance"),         html.Td(self.exchange.GetAccountBalance(quoteasset) + " " + quoteasset, style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Binance balance"),         html.Td(f"{self.exchange.GetAccountBalance(quote).get('free')} {quote}", style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Internal balance"),        html.Td(f'{self.database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")} {quoteasset} \t + {self.helpers.locked_in_trades(quoteasset)} {quoteasset} locked in {self.helpers.open_orders(quoteasset)} trades. Sum = {sum([float(self.database.GetAccountBalance(quoteasset=quoteasset, real_or_internal="internal")), self.helpers.locked_in_trades(quoteasset)])} {quoteasset}' , style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Internal balance"),        html.Td(f'{self.database.get_db_account_balance(quote=quote, internal_balance=True)} {quote} \t + {self.helpers.locked_in_trades(quote)} {quote} locked in {self.helpers.open_orders(quote)} trades. Sum = {sum([float(self.database.get_db_account_balance(quote=quote, internal_balance=True)), self.helpers.locked_in_trades(quote)])} {quote}' , style={'color':'#a3a7b0'})]),
 
-                                                                            html.Tr([html.Td("Profit"),                  html.Td("{profit_in_quote} {quoteasset} ({profit_in_percentage}%)".format(quoteasset           = quoteasset,
-                                                                                                                                                                                                   profit_in_quote      = self.database.get_profit(quoteasset, real_or_internal='internal'),
-                                                                                                                                                                                                   profit_in_percentage = format(round(Decimal(self.database.get_profit(quoteasset, real_or_internal='internal'))/Decimal(self.database.GetStartBalance(quoteasset=quoteasset))*100, 2), 'f')),
+                                                                            html.Tr([html.Td("Profit"),                  html.Td("{profit_in_quote} {quote} ({profit_in_percentage}%)".format(quote = quote,
+                                                                                                                                                                                              profit_in_quote = self.database.get_db_account_balance(quote, real_profit=True),
+                                                                                                                                                                                              profit_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit=True))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))*100, 2), 'f')),
                                                                                                                                  style={'color':'#a3a7b0'})]),
-                                                                            html.Tr([html.Td("Fees"),                    html.Td("{fees_in_quote} {quoteasset} ({fees_in_BNB} BNB)".format(quoteasset    = quoteasset,
-                                                                                                                                                                                           fees_in_quote = self.database.GetQuoteFees(quoteasset),
-                                                                                                                                                                                           fees_in_BNB   = self.database.GetBNBFees(quoteasset)),
+                                                                            html.Tr([html.Td("Fees"),                    html.Td("{fees_in_quote} {quote} ({fees_in_BNB} BNB)".format(quote    = quote,
+                                                                                                                                                                                      fees_in_quote = self.database.get_db_account_balance(quote, internal_quote_fees=True),
+                                                                                                                                                                                      fees_in_BNB   = self.database.get_db_account_balance(quote, internal_BNB_fees=True)),
                                                                                                                                  style={'color':'#a3a7b0'})]),
-                                                                            html.Tr([html.Td("Profit - Fees"),           html.Td("{profit_minus_fees_in_quote} {quoteasset} ({profit_minus_fees_in_quote_in_percentage}%)".format(quoteasset                 = quoteasset,
-                                                                                                                                                                                                                                  profit_minus_fees_in_quote = self.database.GetProfit_minus_fees(quoteasset),
-                                                                                                                                                                                                                                  profit_minus_fees_in_quote_in_percentage = format(round(((Decimal(self.database.GetStartBalance(quoteasset=quoteasset))+Decimal(self.database.GetProfit_minus_fees(quoteasset)))/Decimal(self.database.GetStartBalance(quoteasset=quoteasset))-1)*100, 2), 'f')), style={'color':'#a3a7b0'})]),
-                                                                            html.Tr([html.Td("Average hold duration"),   html.Td("{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.quote_average_hold_duration(quoteasset).days,
-                                                                                                                                                                                     hours      = self.helpers.quote_average_hold_duration(quoteasset).days * 24 + self.helpers.quote_average_hold_duration(quoteasset).seconds // 3600,
-                                                                                                                                                                                     minutes    = (self.helpers.quote_average_hold_duration(quoteasset).seconds % 3600) // 60,
-                                                                                                                                                                                     seconds    = self.helpers.quote_average_hold_duration(quoteasset).seconds % 60), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Profit - Fees"),           html.Td("{profit_minus_fees_in_quote} {quote} ({profit_minus_fees_in_quote_in_percentage}%)".format(quote = quote,
+                                                                                                                                                                                                                             profit_minus_fees_in_quote = self.database.get_db_account_balance(quote, internal_profit_minus_fees=True),
+                                                                                                                                                                                                                             profit_minus_fees_in_quote_in_percentage = format(round(((Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))+Decimal(self.database.get_db_account_balance(quote=quote, internal_profit_minus_fees=True)))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))-1)*100, 2), 'f')), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Average hold duration"),   html.Td("{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.quote_average_hold_duration(quote).days,
+                                                                                                                                                                                     hours      = self.helpers.quote_average_hold_duration(quote).days * 24 + self.helpers.quote_average_hold_duration(quote).seconds // 3600,
+                                                                                                                                                                                     minutes    = (self.helpers.quote_average_hold_duration(quote).seconds % 3600) // 60,
+                                                                                                                                                                                     seconds    = self.helpers.quote_average_hold_duration(quote).seconds % 60), style={'color':'#a3a7b0'})]),
                                                                         ]
                                                                     )
                                                                 ],
@@ -85,12 +85,12 @@ class Dashboard:
                                                                 # responsive = True,
                                                                 striped    = True,
                                                             ), width=4),
-                                            dbc.Col(dcc.Graph(id="graph-"+str(counter+1), figure=self.plot_balances_evolution(quoteasset=quoteasset), config={"doubleClick": "reset"}), width=7),
+                                            dbc.Col(dcc.Graph(id="graph-"+str(counter+1), figure=self.plot_balances_evolution(quote=quote), config={"doubleClick": "reset"}), width=7),
                                             ]),
 
                                     dbc.Row(dbc.Col(html.Hr()))
                                 ])
-                         for counter, quoteasset in enumerate(self.existing_quoteassets)]
+                         for counter, quote in enumerate(self.existing_quoteassets)]
                 ),
 
 
@@ -171,17 +171,17 @@ class Dashboard:
                        Input('Dropdown_duration',   'value'),
                        Input('Dropdown_indicators', 'value')])(self.plot_pair_data)
 
-    def plot_balances_evolution(self, quoteasset:str, save:bool=False):
-        """Plots the evolution of the balance of each quoteasset since the first sell order."""
+    def plot_balances_evolution(self, quote:str, save:bool=False):
+        """Plots the evolution of the balance of each quote since the first sell order."""
 
         fig = dict()
 
-        all_orders = list(self.database.get_quote_orders(quoteasset=quoteasset))
+        all_orders = list(self.database.get_quote_orders(quote=quote))
 
         profit_list = [Decimal(dict(order)['profit_minus_fees']) for order in all_orders if dict(order)['side'] == 'SELL']
         cummulative_profit_list1 = np.cumsum(profit_list).tolist()
         # Add the starting balance to each item
-        cummulative_profit_list2 = [item + Decimal(self.database.GetStartBalance(quoteasset)) for item in cummulative_profit_list1]
+        cummulative_profit_list2 = [item + Decimal(self.database.get_db_account_balance(quote=quote, started_with=True)) for item in cummulative_profit_list1]
 
         fig['data'] = [{'x': [datetime.strptime(dict(order)['transactTime'], '%Y-%m-%d %H:%M:%S') for order in all_orders if
                               dict(order)['side'] == 'SELL'] + [datetime.utcnow()],
@@ -189,7 +189,7 @@ class Dashboard:
 
         fig['layout'] = {
             "margin"    : {"t": 30, "b": 20},
-            "title"     : quoteasset + " balance evolution",
+            "title"     : quote + " balance evolution",
             "titlefont" : dict(size=18,color='#a3a7b0'),
             "height"    : 350,
             "xaxis": {
@@ -394,7 +394,7 @@ class Dashboard:
         })
 
         # Set y-axes titles
-        fig.update_yaxes(title_text="<b>" + pair.replace(bot['quoteasset'], '') + "</b> price in <b>" + bot['quoteasset'] + " </b>", secondary_y=False)
+        fig.update_yaxes(title_text="<b>" + pair.replace(bot['quote'], '') + "</b> price in <b>" + bot['quote'] + " </b>", secondary_y=False)
         fig.update_yaxes(title_text="<b>Volume</b>", secondary_y=True)
 
 
@@ -402,10 +402,10 @@ class Dashboard:
 
         # Check if the bot sold at least one time and adapt what's displayed
         if len(list(self.database.GetOrdersOfBot(pair))) > 1:
-            profit = f"{dict(self.database.GetBot(pair=pair))['bot_profit']} {bot['quoteasset']}"
+            profit = f"{dict(self.database.GetBot(pair=pair))['bot_profit']} {bot['quote']}"
 
-            profit_minus_fees = "{profit_minus_fees} {quoteasset}".format(quoteasset        = bot['quoteasset'],
-                                                                          profit_minus_fees = dict(self.database.GetBot(pair=pair))['bot_profit_minus_fees'])
+            profit_minus_fees = "{profit_minus_fees} {quote}".format(quote        = bot['quote'],
+                                                                     profit_minus_fees = dict(self.database.GetBot(pair=pair))['bot_profit_minus_fees'])
 
             average_hold_duration_string = "{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.pair_average_hold_duration(pair).days,
                                                                                                hours      = self.helpers.pair_average_hold_duration(pair).days * 24 + self.helpers.pair_average_hold_duration(pair).seconds // 3600,
@@ -460,9 +460,9 @@ class Dashboard:
                         [
                             html.Tr([html.Td("Profit"),                 html.Td(profit, style={'color':'#a3a7b0'})]),
 
-                            html.Tr([html.Td("Fees"),                   html.Td("{fees_in_quote} {quoteasset} ({fees_in_BNB} BNB)".format(quoteasset    = bot['quoteasset'],
-                                                                                                                                          fees_in_quote = dict(self.database.GetBot(pair=pair))['bot_quote_fees'],
-                                                                                                                                          fees_in_BNB   = dict(self.database.GetBot(pair=pair))['bot_BNB_fees']), style={'color':'#a3a7b0'})]),
+                            html.Tr([html.Td("Fees"),                   html.Td("{fees_in_quote} {quote} ({fees_in_BNB} BNB)".format(quote    = bot['quote'],
+                                                                                                                                     fees_in_quote = dict(self.database.GetBot(pair=pair))['bot_quote_fees'],
+                                                                                                                                     fees_in_BNB   = dict(self.database.GetBot(pair=pair))['bot_BNB_fees']), style={'color':'#a3a7b0'})]),
                             html.Tr([html.Td("Profit - Fees"),          html.Td(profit_minus_fees, style={'color':'#a3a7b0'})]),
 
                             html.Tr([html.Td("Average hold duration"),  html.Td(average_hold_duration_string, style={'color':'#a3a7b0'})]),

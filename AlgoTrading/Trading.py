@@ -20,11 +20,11 @@ import random
 import time
 from freezegun import freeze_time
 
-# --------------------------------------
+# ------------------------------------------
 # # Clear file database.db
-# with open('assets/database_live.db', "w"):
+# with open('assets/database_paper.db', "w"):
 #     pass
-# --------------------------------------
+# ------------------------------------------
 
 class Strategy:
 
@@ -81,8 +81,8 @@ class Trading:
         self.strategy = Strategy(name='SSF_Crossover')
 
 
-        # List of all the quoteassets present in the database
-        self.existing_quoteassets = list(set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()]))             # ['ETH', 'BTC']
+        # List of all the quotes present in the database
+        self.existing_quoteassets = list(set([dict(bot)['quote'] for bot in self.database.GetAllBots()]))             # ['ETH', 'BTC']
 
         # For the Telegram connexion
         parser = cfg.ConfigParser()
@@ -93,6 +93,17 @@ class Trading:
 
     def main_loop(self):
 
+        # In account_balances.db, create a line for each quote (if they not already existing)
+        for quote in self.existing_quoteassets:
+            self.database.initiate_db_account_balances(quote            = quote,
+                                                       started_with     = self.exchange.GetAccountBalance(quote).get('free') if not self.paper_trading else 1, # if paper trading, start with a balance of 1 for each quote
+                                                       real_balance     = self.exchange.GetAccountBalance(quote).get('free'),
+                                                       internal_balance = self.exchange.GetAccountBalance(quote).get('free') if not self.paper_trading else 1)
+
+        # For real trading only, check if the values stored in the db are identical to those on Binance.
+        if not self.paper_trading:
+            self.check_database_correctness()
+
         quotes_to_trade_on = self.quotes_to_trade_on
 
         def create_bots():
@@ -101,22 +112,23 @@ class Trading:
             sp       = yaspin()
             sp.color = 'green'
 
-            def create_bot(pair_:str, quote_:str, timeframe_:str):
+            def create_bot(pair_:str, quote__:str, timeframe_:str):
                 """ In the database, create and save a bot with a set of parameters. """
 
                 # Get the quotePrecision for this pair
                 pair_info = self.exchange.GetMetadataOfPair(pair=pair_)
-                BNB_info  = self.exchange.GetMetadataOfPair(pair='BNB'+quote_)
+                BNB_info  = self.exchange.GetMetadataOfPair(pair='BNB'+quote__)
 
                 if pair_info:
                     # Create the bot with a set of parameters
                     bot = dict(pair				     = pair_,
-                               quoteasset		     = quote_,
+                               quote		         = quote__,
                                timeframe 		     = timeframe_,
                                status                = '',
-                               quoteBalance          = '',
-                               baseBalance           = '',
-                               quote_lockedintrades  = '0',
+                               quote_allocation      = '',
+                               base_balance          = '',
+                               quote_lockedintrade   = '',
+                               base_value_in_quote   = '',
                                last_order_date       = '',
                                last_profit		     = '',
                                bot_profit 	         = '0',
@@ -135,12 +147,12 @@ class Trading:
 
                     self.database.SaveBot(bot)			# Each row of the table 'bots' is made of the values of 'bot'.
 
-            # List of all the quoteassets present in the database
-            existing_quoteassets = set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()])                              # ['ETH', 'BTC']
+            # List of all the quotes present in the database
+            existing_quoteassets = set([dict(bot)['quote'] for bot in self.database.GetAllBots()])                                  # ['ETH', 'BTC']
             # Unique values of the two. | = union of 2 sets.
-            AllQuoteassets = list(existing_quoteassets | set(quotes_to_trade_on))                                                # ['ETH', 'BTC']
+            AllQuoteassets = list(existing_quoteassets | set(quotes_to_trade_on))                                                   # ['ETH', 'BTC']
 
-            pairs  = self.exchange.GetNameOfPairs_WithQuoteasset(AllQuoteassets)                                                     # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
+            pairs  = self.exchange.GetNameOfPairs_WithQuoteasset(AllQuoteassets)                                                    # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
 
             if pairs == {}:
                 sys.exit("Could not get the pairs from Binance to create the bots. Exiting the script.")
@@ -150,7 +162,7 @@ class Trading:
                 sp.start()
                 # Create the bots that don't already exist in parallel. Use the default number of workers in Pool(), which given by os.cpu_count(). Here, 8 are used.
                 pool_  = Pool()
-                func_bot = partial(create_bot, quote_=quote_, timeframe_=self.timeframe)
+                func_bot = partial(create_bot, quote__=quote_, timeframe_=self.timeframe)
                 pairs_without_bot = [pair for pair in pairs[quote_] if not self.database.GetBot(pair)]
                 pool_.map(func_bot, pairs_without_bot)
                 pool_.close()
@@ -165,16 +177,9 @@ class Trading:
 
         create_bots()
 
-        # In the 'account_balances' db, create an a line for each quoteasset (if they not already existing)
-        for quote in self.existing_quoteassets:
-            self.database.InitiateAccountBalance(quoteasset             = quote,
-                                                 started_with           = self.exchange.GetAccountBalance(quote) if not self.paper_trading else 1, # if paper trading, start with a balance of 1 for each quoteasset
-                                                 real_quote_balance     = self.exchange.GetAccountBalance(quote),
-                                                 internal_quote_balance = self.exchange.GetAccountBalance(quote) if not self.paper_trading else 1)
-
         colorama.init()
         print(colorama.Fore.GREEN + "\n_______________________________________________________________________________________________")
-        print(colorama.Fore.GREEN + f"{'PAPER' if self.paper_trading else ''} TRADING IS LIVE.\nTimeframe : {self.timeframe}.\n")
+        print(colorama.Fore.GREEN + f"{'PAPER' if self.paper_trading else 'LIVE'} TRADING IS RUNNING.\nTimeframe : {self.timeframe}.\n")
 
         def print_trades_sequence(buys_:dict, sells_:dict):
             """ Prints the results of the last search for signals. """
@@ -209,14 +214,28 @@ class Trading:
 
                 # Summary of the search
                 print_trades_sequence(buys_=buys, sells_=sells)
+
+                # Update the quote values of the base balance of each bot
+                for bot in self.database.GetAllBots():
+                    bot = dict(bot)
+                    self.database.UpdateBot(pair                = bot['pair'],
+                                            base_value_in_quote = '' if bot['base_balance']=='' else format(round(Decimal(bot['base_balance'])*Decimal(self.exchange.GetLastestPriceOfPair(bot['pair'])), bot['quoteAssetPrecision']), 'f'))
+
+
+                # For real trading only, check if the values stored in the db are identical to those on Binance.
+                if not self.paper_trading:
+                    self.check_database_correctness()
+
+                # Manually stop the while loop
                 # break
 
 
     def buy_order(self, bot:dict, dict_to_fill:dict):
-        """ The bot looks for a buy signal. If yes, places an order. """
+        """ The bot looks for a buy signal. If yes, it places an order. """
 
         candles    = 200
         pair 	   = bot['pair']
+        quote 	   = bot['quote']
         df         = self.exchange.GetPairKlines(pair=pair, timeframe=bot['timeframe'], candles=candles)				                    # get dataframe
 
         if df.empty:
@@ -236,40 +255,42 @@ class Trading:
                 # Mandatory parameters to send to the endpoint:
                 buy_order_parameters = dict(symbol = pair,
                                             side   = "BUY",
-                                            type   = "LIMIT")
+                                            type   = "MARKET")
 
-                quoteOrderQty, buy_price, quantity = Decimal('0'), Decimal('0'), Decimal('0')
+                buy_price, quantity = Decimal('0'), Decimal('0')
+                market_price  = Decimal(self.exchange.GetLastestPriceOfPair(pair=pair))
+                quoteOrderQty = Decimal(bot['quote_allocation'])
 
                 # Additional mandatory parameters based on type
                 if buy_order_parameters['type'] == 'MARKET':
-                    quoteOrderQty = Decimal(self.database.GetBot(pair)['quoteBalance'])
-                    buy_order_parameters['quoteOrderQty'] = format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f')		    # specifies the amount the user wants to spend (when buying) or receive (when selling) of the quote asset; the correct quantity will be determined based on the market liquidity and quoteOrderQty
+                    buy_price = market_price                                                                                                # Used during paper_trading only
+                    quantity = self.exchange.RoundToValidQuantity(pair=pair, quantity=quoteOrderQty/buy_price)                              # Used during paper_trading only
+                    buy_order_parameters['quoteOrderQty'] = quoteOrderQty		                                                            # specifies the amount the user wants to spend (when buying) or receive (when selling) of the quote asset; the correct quantity will be determined based on the market liquidity and quoteOrderQty
 
                 elif buy_order_parameters['type'] == 'LIMIT':
-                    market_price  = self.exchange.GetLastestPriceOfPair(pair=pair)                                                       # market_price is a string
-                    buy_price     = self.exchange.RoundToValidPrice(pair=pair, price=Decimal(market_price)*Decimal(0.99))                # buy_price is a Decimal        # Addresses the issue of PRICE_FILTER
-                    quantity      = self.exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(bot['quoteBalance'])/buy_price)       # quantity  is a Decimal        # Addresses the issue of LOT_SIZE
-                    quoteOrderQty = buy_price*quantity
+                    market_price  = self.exchange.GetLastestPriceOfPair(pair=pair)                                                          # market_price is a string
+                    buy_price     = self.exchange.RoundToValidPrice(pair=pair, price=Decimal(market_price)*Decimal(0.99))                   # buy_price is a Decimal        # Addresses the issue of PRICE_FILTER
+                    quantity      = self.exchange.RoundToValidQuantity(pair=pair, quantity=quoteOrderQty/buy_price)                         # quantity  is a Decimal        # Addresses the issue of LOT_SIZE
 
-                    buy_order_parameters['timeInForce'] = 'GTC'		 		                                                        # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
+                    buy_order_parameters['timeInForce'] = 'GTC'		 		                                                                # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
                     buy_order_parameters['price'] 	    = format(round(buy_price, bot['baseAssetPrecision']), 'f')
                     buy_order_parameters['quantity']    = format(round(quantity,  bot['baseAssetPrecision']), 'f')
 
-                # Place a buy order
-                # place_order_time = datetime.utcnow()
+                # Place the buy order
                 place_order_time = datetime.utcfromtimestamp(self.exchange.GetServerTime()/1000)
                 buy_order_result = self.exchange.PlaceOrder(order_params=buy_order_parameters, test_order=self.paper_trading)
 
                 if self.paper_trading:
+                    cummulativeQuoteQty = buy_price*quantity
                     dummy_buy_order_result = {"symbol"               : pair,
                                               "orderId"              : str(uuid1()),
                                               "orderListId"          : -1,
                                               "clientOrderId"        : "Buy_6gCrw2kRUAF9CvJDGP16IP",
                                               "transactTime"         : str(self.exchange.GetServerTime()),
-                                              "price"                : format(round(buy_price,     bot['quotePrecision']),      'f'),
-                                              "origQty"              : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
-                                              "executedQty"          : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
-                                              "cummulativeQuoteQty"  : format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f'),     # On suppose que tout est passé et que les frais ont été payés en BNB
+                                              "price"                : format(round(buy_price,           bot['quotePrecision']),      'f'),
+                                              "origQty"              : format(round(quantity,            bot['baseAssetPrecision']),  'f'),
+                                              "executedQty"          : format(round(quantity,            bot['baseAssetPrecision']),  'f'),
+                                              "cummulativeQuoteQty"  : format(round(cummulativeQuoteQty, bot['quoteAssetPrecision']), 'f'),     # On suppose que tout est passé et que les frais ont été payés en BNB
                                               "status"               : "FILLED",
                                               "timeInForce"          : "GTC",
                                               "type"                 : buy_order_parameters['type'],
@@ -279,30 +300,30 @@ class Trading:
                 if "code" in buy_order_result:
                     formatted_transactTime = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime('%H:%M:%S')
                     print(f"\t{formatted_transactTime} - Error in placing a buy {'test' if self.paper_trading else ''} order on {pair} at {buy_price} :/")
-                    self.database.UpdateBot(pair=pair, status='', quoteBalance='')
+                    self.database.UpdateBot(pair=pair, status='', quote_allocation='')
                     print(pair, buy_order_result)
                     return None
 
                 else:
-                    text = "\t{time} - Success in placing a buy  {test} order on {pair:<8}  :  bought {quantity:<15} {base:<5} at {price:<12} {quoteasset} for {quoteQty:<9} {quoteasset}.".format(time       = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                                                                                                                                                                                   test       = 'test' if self.paper_trading else '',
-                                                                                                                                                                                                   pair       = pair,
-                                                                                                                                                                                                   quantity   = buy_order_result['executedQty'],
-                                                                                                                                                                                                   base       = pair.replace(bot['quoteasset'], ''),
-                                                                                                                                                                                                   price      = buy_price,
-                                                                                                                                                                                                   quoteasset = bot['quoteasset'],
-                                                                                                                                                                                                   quoteQty   = buy_order_result['cummulativeQuoteQty'])
+                    text = "\t{time} - Success in placing a buy  {test} order on {pair:<8}  :  bought {quantity:<15} {base:<5} at {price:<12} {quote} for {quoteQty:<9} {quote}.".format(time       = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                                                                                                                                                                         test       = 'test' if self.paper_trading else '',
+                                                                                                                                                                                         pair       = pair,
+                                                                                                                                                                                         quantity   = buy_order_result['executedQty'],
+                                                                                                                                                                                         base       = pair.replace(quote, ''),
+                                                                                                                                                                                         price      = buy_price,
+                                                                                                                                                                                         quote      = quote,
+                                                                                                                                                                                         quoteQty   = buy_order_result['cummulativeQuoteQty'])
 
                     print(text)
 
                     # Compute the time taken to fill the order
                     timedelta_to_fill = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000) - place_order_time
 
-                    # Compute the fees in quoteasset and BNB
+                    # Compute the fees in quote and BNB
                     quote_fee = Decimal(buy_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
-                    BNB_fee   = quote_fee / Decimal(self.exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
+                    BNB_fee   = quote_fee / Decimal(self.exchange.GetLastestPriceOfPair(pair='BNB'+quote))
 
-                    self.database.SaveOrder(quoteasset        = bot['quoteasset'],
+                    self.database.SaveOrder(quote             = quote,
                                             order_result      = buy_order_result,
                                             hold_duration     = '-',
                                             profit            = '-',
@@ -311,30 +332,31 @@ class Trading:
                                             profit_minus_fees = '-',
                                             time_to_fill      = str(timedelta_to_fill))
 
+                    base_balance = Decimal(self.exchange.GetAccountBalance(pair.replace(quote,'')).get('free')) if not self.paper_trading else Decimal(buy_order_result['executedQty'])
+
                     self.database.UpdateBot(pair                 = pair,
                                             status               = 'Looking to exit',
-                                            quoteBalance         = buy_order_result['cummulativeQuoteQty'],
-                                            baseBalance          = buy_order_result['executedQty'],
-                                            quote_lockedintrades = buy_order_result['cummulativeQuoteQty'],
+                                            quote_allocation     = bot['quote_allocation'],
+                                            base_balance         = format(round(base_balance, bot['baseAssetPrecision']), 'f'),
+                                            quote_lockedintrade  = buy_order_result['cummulativeQuoteQty'],
+                                            base_value_in_quote  = format(round(base_balance*buy_price, bot['quoteAssetPrecision']), 'f'),
                                             last_order_date      = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
                                             number_of_orders     = +1,                                                                # Added
                                             bot_quote_fees       = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),         # Added to the current bot_quote_fees
                                             bot_BNB_fees         = format(round(BNB_fee,   bot['BNB_precision']),       'f'))         # Added
 
-
                     # Update the balances count
-                    self.database.UpdateAccountBalance(quoteasset                 = bot['quoteasset'],
-                                                       real_quote_balance         = self.exchange.GetAccountBalance(quoteasset=bot['quoteasset']),
-                                                       real_profit                = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),
-                                                       internal_quote_balance     = format(round(-Decimal(buy_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),           # Added
-                                                       internal_profit            = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),                                                    # Added
-                                                       internal_quote_fees        = format(round(quote_fee,    bot['quoteAssetPrecision']), 'f'),                                                    # Added
-                                                       internal_BNB_fees          = format(round(BNB_fee,      bot['BNB_precision']),       'f'),                                                    # Added
-                                                       internal_profit_minus_fees = format(round(Decimal('0'), bot['quoteAssetPrecision']), 'f'),                                                    # Added
-                                                       quoteAssetPrecision        = bot['quoteAssetPrecision'],
-                                                       BNB_Precision              = bot['BNB_precision'])
-
-
+                    self.database.update_db_account_balances(quote                      = quote,
+                                                             real_balance               = self.exchange.GetAccountBalance(quote=quote).get('free'),
+                                                             real_locked                = self.exchange.GetAccountBalance(quote=quote).get('locked'),
+                                                             internal_balance           = format(round(-Decimal(buy_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),               # Added
+                                                             internal_locked            = format(round(Decimal(buy_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),                # Added
+                                                             internal_profit            = '0',                                                                                                             # Added
+                                                             internal_quote_fees        = format(round(quote_fee,    bot['quoteAssetPrecision']), 'f'),                                                    # Added
+                                                             internal_BNB_fees          = format(round(BNB_fee,      bot['BNB_precision']),       'f'),                                                    # Added
+                                                             internal_profit_minus_fees = '0',                                                                                                             # Added
+                                                             quoteAssetPrecision        = bot['quoteAssetPrecision'],
+                                                             BNB_Precision              = bot['BNB_precision'])
 
                     # Send a text to telegram
                     if self.send_to_telegram:
@@ -348,19 +370,20 @@ class Trading:
                     return dict_to_fill
 
             except Exception as e:
-                self.database.UpdateBot(pair=pair, status='', quoteBalance='')
+                self.database.UpdateBot(pair=pair, status='', quote_allocation='')
                 print(f'\tError in processing a {"test" if self.paper_trading else ""} buy order on {pair}. Error : {e}.')
 
         else:
-            self.database.UpdateBot(pair=pair, status='', quoteBalance='')
+            self.database.UpdateBot(pair=pair, status='', quote_allocation='')
 
 
     def sell_order(self, bot:dict, dict_to_fill:dict, **kwargs):
-        """ The bot successfully placed a buy order and is now look for a sell signal.
-            If it finds one, places a sell order. """
+        """ The bot successfully placed a buy order and is now looking for a sell signal.
+            If it finds one, it places a sell order. """
 
         candles     = 960
         pair 	    = bot['pair']
+        quote 	    = bot['quote']
         df    	    = self.exchange.GetPairKlines(pair, bot['timeframe'], candles=candles)
 
         if df.empty:
@@ -380,45 +403,39 @@ class Trading:
             # signal = self.strategy.find_signal(df=df)		# check for a signal (returns 'buy'/'sell')
             signal = random.choice(['buy', 'sell'])
 
+
         if signal == 'sell':
             try:
+                previously_locked_in_the_trade = Decimal(bot['quote_lockedintrade'])                                                                # On a pas encore update la balance donc on sait pour combien de quote a acheté
+
                 # Mandatory parameters to send to the endpoint:
                 sell_order_parameters = dict(symbol = pair,
                                              side   = "SELL",
-                                             type   = "LIMIT" if not kwargs.get('liquidate_position', False) else 'MARKET')
+                                             type   = "MARKET" if not kwargs.get('liquidate_position', False) else 'MARKET')
 
-                quoteOrderQty, sell_price, quantity = Decimal('0'), Decimal('0'), Decimal('0')
-                market_price  = self.exchange.GetLastestPriceOfPair(pair=pair)                                                       # market_price is a string
+                sell_price, quantity = Decimal('0'), Decimal('0')
+                market_price = Decimal(self.exchange.GetLastestPriceOfPair(pair=pair))
 
                 # Additional mandatory parameters based on type
                 if sell_order_parameters['type'] == 'MARKET':
-                    sell_price    = market_price
-                    quoteOrderQty = Decimal(self.database.GetBot(pair)['quoteBalance'])
-
-                    if kwargs.get('liquidate_position', False):
-                        quantity = Decimal(self.database.GetBot(pair)['baseBalance'])
-                        sell_order_parameters['quantity'] = format(round(quantity, bot['baseAssetPrecision']), 'f')
-                    else:
-                        sell_order_parameters['quoteOrderQty'] = format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f')			# specifies the amount the user wants to spend (when buying) or receive (when selling) of the quote asset; the correct quantity will be determined based on the market liquidity and quoteOrderQty
-
+                    sell_price = market_price                                                                                                       # used during paper_trading only
+                    quantity   = Decimal(bot['base_balance'])
+                    sell_order_parameters['quantity'] = format(round(quantity, bot['quoteAssetPrecision']), 'f')			                        # specifies the amount the user wants to spend (when buying) or receive (when selling) of the base asset; the correct quote quantity will be determined based on the market liquidity and quantity
 
                 elif sell_order_parameters['type'] == 'LIMIT':
-                    sell_price    = self.exchange.RoundToValidPrice(pair=pair, price=Decimal(market_price)*Decimal(1.01))                # buy_price is a Decimal
-                    if kwargs.get('liquidate_position', False):
-                        quantity = self.exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(self.database.GetBot(pair)['baseBalance']))
-                    else:
-                        quantity = self.exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(bot['quoteBalance'])/sell_price)      # quantity  is a Decimal
-                    quoteOrderQty = sell_price*quantity
-
-                    sell_order_parameters['timeInForce'] = 'GTC'		 		                                                     # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
+                    sell_price = self.exchange.RoundToValidPrice(pair=pair, price=market_price*Decimal(1.01))
+                    quantity   = self.exchange.RoundToValidQuantity(pair=pair, quantity=Decimal(bot['base_balance']))
+                    sell_order_parameters['timeInForce'] = 'GTC'		 		                                                                    # 'GTC' (Good-Till-Canceled), 'IOC' (Immediate-or-Cancel) (part or all of the order) or 'FOK' (Fill-or-Kill) (whole order)
                     sell_order_parameters['price'] 	     = format(round(sell_price, bot['baseAssetPrecision']), 'f')
                     sell_order_parameters['quantity']    = format(round(quantity,   bot['baseAssetPrecision']), 'f')
 
-                # Place the order
-                place_order_time = datetime.utcfromtimestamp(self.exchange.GetServerTime()/1000)
+
+                # Place the sell order
+                place_order_time  = datetime.utcfromtimestamp(self.exchange.GetServerTime()/1000)
                 sell_order_result = self.exchange.PlaceOrder(order_params=sell_order_parameters, test_order=self.paper_trading)
 
                 if self.paper_trading:
+                    quoteOrderQty = sell_price*quantity
                     dummy_sell_order_result = {"symbol"               : pair,
                                                "orderId"              : str(uuid1()),
                                                "orderListId"          : -1,
@@ -427,7 +444,7 @@ class Trading:
                                                "price"                : format(round(sell_price,    bot['quotePrecision']),      'f'),
                                                "origQty"              : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
                                                "executedQty"          : format(round(quantity,      bot['baseAssetPrecision']),  'f'),
-                                               "cummulativeQuoteQty"  : format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f'),
+                                               "cummulativeQuoteQty"  : format(round(quoteOrderQty, bot['quoteAssetPrecision']), 'f'),              # On suppose que tout est passé et que les frais ont été payés en BNB
                                                "status"               : "FILLED",
                                                "timeInForce"          : "GTC",
                                                "type"                 : sell_order_parameters['type'],
@@ -436,7 +453,7 @@ class Trading:
 
                 if "code" in sell_order_result:
                     formatted_transactTime = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime('%H:%M:%S')
-                    print(f"\t{formatted_transactTime} - Error in placing a sell {'test' if self.paper_trading else ''} order on {pair} at {sell_price} :/")
+                    print(f"\t{formatted_transactTime} - Error in placing a sell {'test ' if self.paper_trading else ''}order on {pair} at {sell_price} :/")
                     print(pair, sell_order_result)
                     return None
 
@@ -444,27 +461,27 @@ class Trading:
                     # Compute the time taken to fill the order
                     timedelta_to_fill = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000) - place_order_time
 
-                    # Compute the profit from the trade, in quoteasset
-                    profit            = Decimal(sell_order_result['cummulativeQuoteQty']) - Decimal(self.database.GetBot(pair)['quoteBalance'])                     # On a pas encore update la balance donc on sait pour combien de quoteasset a acheté
+                    # Compute the profit from the trade, in quote
+                    profit            = Decimal(sell_order_result['cummulativeQuoteQty']) - previously_locked_in_the_trade
                     quote_fee         = Decimal(sell_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
-                    profit_minus_fees = profit - quote_fee - Decimal(dict(list(self.database.GetOrdersOfBot(pair))[-1])['quote_fee'])
-                    BNB_fee           = quote_fee / Decimal(self.exchange.GetLastestPriceOfPair(pair='BNB'+bot['quoteasset']))
+                    profit_minus_fees = profit - quote_fee - Decimal(dict(list(self.database.GetOrdersOfBot(pair))[-1])['quote_fee'])   # Include the quote fees from the sell and the buy
+                    BNB_fee           = quote_fee / Decimal(self.exchange.GetLastestPriceOfPair(pair=f"BNB{quote}"))
 
                     # How long we have been holding the asset for
                     hold_timedelta = datetime.utcfromtimestamp(int(int(sell_order_result['transactTime'])/1000)) - datetime.strptime(dict(self.database.GetBot(pair=pair))['last_order_date'], "%Y-%m-%d %H:%M:%S")
 
-                    text = "\t{time} - Success in placing a sell {test} order on {pair:<8}  :  sold {quantity:<15} {base:<5} at {price:<10} {quoteasset} for {quoteQty:<9} {quoteasset}. \tProfit-Fees: {profit_minus_fees} {quoteasset}".format(time       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                                                                                                                                                                                                                                                 test       = 'test' if self.paper_trading and not kwargs.get('liquidate_position', False) else 'liquidation' if kwargs.get('liquidate_position', False) else '',
-                                                                                                                                                                                                                                                 pair       = pair,
-                                                                                                                                                                                                                                                 quantity   = sell_order_result['executedQty'],
-                                                                                                                                                                                                                                                 base       = pair.replace(bot['quoteasset'], ''),
-                                                                                                                                                                                                                                                 price      = sell_price,
-                                                                                                                                                                                                                                                 quoteasset = bot['quoteasset'],
-                                                                                                                                                                                                                                                 quoteQty   = sell_order_result['cummulativeQuoteQty'],
-                                                                                                                                                                                                                                                 profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'))
+                    text = "\t{time} - Success in placing a sell {test}order on {pair:<8}  :  sold {quantity:<15} {base:<5} at {price:<10} {quote} for {quoteQty:<9} {quote}. \tProfit-Fees: {profit_minus_fees} {quote}".format(time       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
+                                                                                                                                                                                                                                 test       = 'test ' if self.paper_trading and not kwargs.get('liquidate_position', False) else 'liquidation ' if kwargs.get('liquidate_position', False) else '',
+                                                                                                                                                                                                                                 pair       = pair,
+                                                                                                                                                                                                                                 quantity   = sell_order_result['executedQty'],
+                                                                                                                                                                                                                                 base       = pair.replace(quote, ''),
+                                                                                                                                                                                                                                 price      = sell_price,
+                                                                                                                                                                                                                                 quote = quote,
+                                                                                                                                                                                                                                 quoteQty   = sell_order_result['cummulativeQuoteQty'],
+                                                                                                                                                                                                                                 profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'))
                     print(text)
 
-                    self.database.SaveOrder(quoteasset         = bot['quoteasset'],
+                    self.database.SaveOrder(quote              = quote,
                                             order_result       = sell_order_result,
                                             hold_duration      = str(hold_timedelta),
                                             profit             = format(round(profit,            bot['quoteAssetPrecision']), 'f'),
@@ -474,17 +491,20 @@ class Trading:
                                             time_to_fill       = str(timedelta_to_fill),
                                             liquidate_position = kwargs.get('liquidate_position', False))
 
+                    residual_balance = Decimal(self.exchange.GetAccountBalance(pair.replace(quote,'')).get('free')) if not self.paper_trading else Decimal(bot['base_balance'])-Decimal(sell_order_result['executedQty'])  # There is a residual base balance after the sell
+
                     self.database.UpdateBot(pair                  = pair,
                                             status                = '',
-                                            quoteBalance          = '',
-                                            baseBalance           = '',
-                                            quote_lockedintrades  = '0',
+                                            quote_allocation      = '',
+                                            base_balance          = format(round(residual_balance, bot['baseAssetPrecision']), 'f') if residual_balance!=0 else '',
+                                            quote_lockedintrade   = '',
+                                            base_value_in_quote   = format(round(residual_balance*sell_price, bot['quoteAssetPrecision']), 'f'),
                                             last_order_date       = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%Y-%m-%d %H:%M:%S"),
                                             last_profit           = format(round(profit,            bot['quoteAssetPrecision']), 'f'),
-                                            bot_profit            = format(round(profit,            bot['quoteAssetPrecision']), 'f'),       # Added to the current bot_profit
-                                            bot_quote_fees        = format(round(quote_fee,         bot['quoteAssetPrecision']), 'f'),       # Added
-                                            bot_BNB_fees          = format(round(BNB_fee,           bot['BNB_precision']),       'f'),       # Added
-                                            bot_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),       # Added
+                                            bot_profit            = format(round(profit,            bot['quoteAssetPrecision']), 'f'),      # Added to the current bot_profit
+                                            bot_quote_fees        = format(round(quote_fee,         bot['quoteAssetPrecision']), 'f'),      # Added
+                                            bot_BNB_fees          = format(round(BNB_fee,           bot['BNB_precision']),       'f'),      # Added
+                                            bot_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),      # Added
                                             number_of_orders      = +1)
                     if profit>0:
                         self.database.UpdateBot(pair=pair, profitable_sells=+1)
@@ -492,16 +512,17 @@ class Trading:
                         self.database.UpdateBot(pair=pair, unprofitable_sells=+1)
 
                     # Update the internal balances count
-                    self.database.UpdateAccountBalance(quoteasset                 = bot['quoteasset'],
-                                                       real_quote_balance         = self.exchange.GetAccountBalance(quoteasset=bot['quoteasset']),
-                                                       real_profit                = format(round(Decimal(self.exchange.GetAccountBalance(bot['quoteasset']))/Decimal(self.database.GetStartBalance(quoteasset=bot['quoteasset']))*100, 8), 'f'),
-                                                       internal_quote_balance     = format(round(Decimal(sell_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),       # Added
-                                                       internal_profit            = format(round(profit,    bot['quoteAssetPrecision']), 'f'),                                                   # Added
-                                                       internal_quote_fees        = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),                                                   # Added
-                                                       internal_BNB_fees          = format(round(BNB_fee,   bot['BNB_precision']),       'f'),                                                   # Added
-                                                       internal_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),                                           # Added
-                                                       quoteAssetPrecision        = bot['quoteAssetPrecision'],
-                                                       BNB_Precision              = bot['BNB_precision'])
+                    self.database.update_db_account_balances(quote                      = quote,
+                                                             real_balance               = self.exchange.GetAccountBalance(quote=quote).get('free'),
+                                                             real_locked                = self.exchange.GetAccountBalance(quote=quote).get('locked'),
+                                                             internal_balance           = format(round(Decimal(sell_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),   # Added
+                                                             internal_locked            = format(round(-previously_locked_in_the_trade, bot['quoteAssetPrecision']), 'f'),                     # Added
+                                                             internal_profit            = format(round(profit,    bot['quoteAssetPrecision']), 'f'),                                           # Added
+                                                             internal_quote_fees        = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),                                           # Added
+                                                             internal_BNB_fees          = format(round(BNB_fee,   bot['BNB_precision']),       'f'),                                           # Added
+                                                             internal_profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'),                                   # Added
+                                                             quoteAssetPrecision        = bot['quoteAssetPrecision'],
+                                                             BNB_Precision              = bot['BNB_precision'])
 
                     # Send a text to telegram
                     if self.send_to_telegram:
@@ -518,7 +539,7 @@ class Trading:
 
             except Exception as e:
                 # We don't update the error in the case of an error : it still needs to sell.
-                print(f'\tError in processing a {"test" if self.paper_trading else ""} sell order on {pair}. Error : {e}.')
+                print(f'\tError in processing a {"test " if self.paper_trading else ""}sell order on {pair}. Error : {e}.')
 
 
     def send_text_to_telegram(self, message):
@@ -543,54 +564,54 @@ class Trading:
 
         account_balance = dict()
 
-        for quoteasset in self.existing_quoteassets:
-            sp.text = f"Processing {quoteasset} pairs..."
+        for quote in self.existing_quoteassets:
+            sp.text = f"Processing {quote} pairs..."
             sp.start()
 
-            account_balance[quoteasset] = Decimal(self.database.GetAccountBalance(quoteasset=quoteasset, real_or_internal='internal'))
+            account_balance[quote] = Decimal(self.database.get_db_account_balance(quote=quote, internal_balance=True))
 
             # If we have room for more bots
-            if len(open_positions[quoteasset]) < self.bots_per_quote:
+            if len(open_positions[quote]) < self.bots_per_quote:
                 # Find the best X pairs by volume
-                sorted_pairs[quoteasset] = self.sort_by_daily_volume(quoteasset=quoteasset)                                                                                     # best_pairs = {'ETH' : ['HOTETH', 'DENTETH', 'NPXSETH', 'NCASHETH', 'KEYETH', 'ZILETH', 'TRXETH', 'SCETH', 'MFTETH', 'VETETH'],
-                # Set the pairs to trade on for each quoteasset : the holding pairs, completed with the best pairs per volume if needed.                                        #               'BTC' : ['HOTBTC', 'VETBTC', 'ZILBTC', 'MBLBTC', 'MATICBTC', 'FTMBTC', 'TRXBTC', 'IOSTBTC', 'DOGEBTC', 'SCBTC']}
-                # Do not trade on the quoteassets and BNB, to avoid balances problems.
-                filtered = (k for k in sorted_pairs[quoteasset] if k not in open_positions[quoteasset] if not k.startswith(tuple([q for q in self.existing_quoteassets])) if not k.startswith('BNB'))
-                trading_pairs[quoteasset] = open_positions[quoteasset] + list(islice(filtered, self.bots_per_quote-len(open_positions[quoteasset])))
+                sorted_pairs[quote] = self.sort_by_daily_volume(quote=quote)                                                                                     # best_pairs = {'ETH' : ['HOTETH', 'DENTETH', 'NPXSETH', 'NCASHETH', 'KEYETH', 'ZILETH', 'TRXETH', 'SCETH', 'MFTETH', 'VETETH'],
+                # Set the pairs to trade on for each quote : the holding pairs, completed with the best pairs per volume if needed.                                        #               'BTC' : ['HOTBTC', 'VETBTC', 'ZILBTC', 'MBLBTC', 'MATICBTC', 'FTMBTC', 'TRXBTC', 'IOSTBTC', 'DOGEBTC', 'SCBTC']}
+                # Do not trade on the quotes and BNB, to avoid balances problems.
+                filtered = (k for k in sorted_pairs[quote] if k not in open_positions[quote] if not k.startswith(tuple([q for q in self.existing_quoteassets])) if not k.startswith('BNB'))
+                trading_pairs[quote] = open_positions[quote] + list(islice(filtered, self.bots_per_quote-len(open_positions[quote])))
 
-                min_amount = sum(Decimal(dict(self.database.GetBot(pair))['MinNotional']) for pair in trading_pairs[quoteasset] if pair not in open_positions[quoteasset])
-                # holding[quoteasset] = sum(Decimal(dict(bot)['quoteBalance']) for bot in database.GetAllBots() if dict(bot)['quoteasset']==quoteasset and dict(bot)['quoteBalance'] != '')           # How much bots are holding atm on this quoteasset.
+                min_amount = sum(Decimal(dict(self.database.GetBot(pair))['MinNotional']) for pair in trading_pairs[quote] if pair not in open_positions[quote])
+                # holding[quote] = sum(Decimal(dict(bot)['quote_allocation']) for bot in database.GetAllBots() if dict(bot)['quote']==quote and dict(bot)['quote_allocation'] != '')           # How much bots are holding atm on this quote.
 
                 sp.stop()
 
                 # Check if balance is enough to trade on the completing pairs
-                if account_balance[quoteasset] > min_amount:
-                    allocation = account_balance[quoteasset] / (len(trading_pairs[quoteasset])-len(open_positions[quoteasset]))
-                    print(f"Paper trading on the top {self.bots_per_quote} pairs by volume on {quoteasset} : {trading_pairs[quoteasset]}")
-                    if open_positions[quoteasset]:
-                        print(f"(using {open_positions[quoteasset]} which {'is' if len(open_positions[quoteasset])==1 else 'are'} still trying to sell.)")
-                    print("- {quoteasset} balance : {quoteasset_balance} {quoteasset}. Each new bot is given {balance} {quoteasset} to trade and has been set as active.".format(quoteasset_balance = account_balance[quoteasset].normalize(),
-                                                                                                                                                                                 balance            = format(round(allocation, 8), 'f'),
-                                                                                                                                                                                 quoteasset         = quoteasset))
+                if account_balance[quote] > min_amount:
+                    allocation = account_balance[quote] / (len(trading_pairs[quote])-len(open_positions[quote]))
+                    print(f"Paper trading on the top {self.bots_per_quote} pairs by volume on {quote} : {trading_pairs[quote]}")
+                    if open_positions[quote]:
+                        print(f"(using {open_positions[quote]} which {'is' if len(open_positions[quote])==1 else 'are'} still trying to sell.)")
+                    print("- {quote} balance : {quote_balance} {quote}. Each new bot is given {balance} {quote} to trade and has been set as active.".format(quote_balance = account_balance[quote].normalize(),
+                                                                                                                                                             balance            = format(round(allocation, 8), 'f'),
+                                                                                                                                                             quote         = quote))
                     # Set the bots as active
-                    for pair in trading_pairs[quoteasset]:
-                        if pair not in open_positions[quoteasset]:
+                    for pair in trading_pairs[quote]:
+                        if pair not in open_positions[quote]:
                             self.database.UpdateBot(pair         = pair,
                                                     status       = 'Looking to enter',
-                                                    quoteBalance = format(round(allocation, dict(self.database.GetBot(pair))['quoteAssetPrecision']), 'f'))
+                                                    quote_allocation = format(round(allocation, dict(self.database.GetBot(pair))['quoteAssetPrecision']), 'f'))
 
                 else:
-                    print("- {quoteasset} balance : {balance} {quoteasset}. Not enough to trade on {nbpairs} pairs. Minimum amount (not including fees) required : {min_amount}{quoteasset}.".format(balance    = account_balance[quoteasset].normalize(),
-                                                                                                                                                                                                     nbpairs    = len(trading_pairs[quoteasset])-len(open_positions[quoteasset]),
-                                                                                                                                                                                                     quoteasset = quoteasset,
-                                                                                                                                                                                                     min_amount = min_amount.normalize()))
+                    print("- {quote} balance : {balance} {quote}. Not enough to trade on {nbpairs} pairs. Minimum amount (not including fees) required : {min_amount}{quote}.".format(balance    = account_balance[quote].normalize(),
+                                                                                                                                                                                      nbpairs    = len(trading_pairs[quote])-len(open_positions[quote]),
+                                                                                                                                                                                      quote = quote,
+                                                                                                                                                                                      min_amount = min_amount.normalize()))
             else:
                 # If we already have the max number of bots, do nothing
                 sp.stop()
-                print(f"- {quoteasset} : No room left for new bots. Trading on {open_positions[quoteasset]}, which are still trying to sell.")
+                print(f"- {quote} : No room left for new bots. Trading on {open_positions[quote]}, which are still trying to sell.")
 
         if set([bot["status"] for bot in self.database.GetAllBots()]) == {''}:
-            sys.exit("\nYou can't trade on any quoteAsset. Please update the starting balance and try again.")
+            sys.exit("\nYou can't trade on any quote. Please update the starting balance and try again.")
 
 
     def wait_for_candle(self)->bool:
@@ -614,13 +635,13 @@ class Trading:
         now = datetime.now()
 
         # Find the time of the next candle
-        # Handle minute timeframes
+        # Minute timeframes
         if parsed_timeframe[1] == 'm':
             min_till_next_candle = roundup(n=now.minute, round_to_multiple_of=int(parsed_timeframe[0])) - now.minute
             next_candle = datetime(now.year, now.month, now.day, now.hour, now.minute, 0) + timedelta(minutes=min_till_next_candle if int(parsed_timeframe[0]) != 1 else 1)
             after_next_candle = next_candle + timedelta(minutes=int(parsed_timeframe[0]))
 
-        # Handle hour timeframes
+        # Hour timeframes
         elif parsed_timeframe[1] == 'h':
             hours_till_next_candle = roundup(n=now.hour, round_to_multiple_of=int(parsed_timeframe[0])) - now.hour
             next_candle = datetime(now.year, now.month, now.day, now.hour, 0, 0) + timedelta(hours=hours_till_next_candle if int(parsed_timeframe[0]) != 1 else 1)
@@ -629,7 +650,7 @@ class Trading:
         sp.text = f'Waiting for the next {self.timeframe} candle (at {next_candle.strftime("%H:%M")}) to start trading.'
 
         wait_till_after_next = False
-        estimated_duration_to_set_the_pairs = 45 # seconds
+        estimated_duration_to_set_the_pairs = 30 # seconds
         # Update the pairs just before the candle arrives
         if now < next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs):
             # If we have more than 57 seconds before the candle, then wait
@@ -677,21 +698,21 @@ class Trading:
     def check_open_positions(self)->dict:
 
         open_positions = dict()
-        # Create a list of all the quoteassets present in the database
-        quoteassets = list(set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()]))
+        # Create a list of all the quotes present in the database
+        quotes = list(set([dict(bot)['quote'] for bot in self.database.GetAllBots()]))
 
-        for quoteasset in quoteassets:
-            open_positions[quoteasset] = [dict(bot)['pair'] for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to exit' and dict(bot)['quoteasset']==quoteasset]                                 # {'ETH':[], 'BTC':[]}
+        for quote in quotes:
+            open_positions[quote] = [dict(bot)['pair'] for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to exit' and dict(bot)['quote']==quote]                                 # {'ETH':[], 'BTC':[]}
 
         return open_positions           # {'ETH':[], 'BTC':[]}
 
 
-    def sort_by_daily_volume(self, quoteasset:str)->list:
-        """ Returns a dict of the best X pairs per quoteasset based on their rolling-24H volume of quoteasset.
-            Therefore, we can access the top trading pairs in terms of quoteasset volume and set our bots on them. """
+    def sort_by_daily_volume(self, quote:str)->list:
+        """ Returns a dict of the best X pairs per quote based on their rolling-24H volume of quote.
+            Therefore, we can access the top trading pairs in terms of quote volume and set our bots on them. """
 
         exchange = self.exchange
-        pairs = exchange.GetNameOfPairs_WithQuoteasset(quoteAssets=[quoteasset])		# {'BTC':['ETHBTC', 'LTCBTC',...]}
+        pairs = exchange.GetNameOfPairs_WithQuoteasset(quotes=[quote])		# {'BTC':['ETHBTC', 'LTCBTC',...]}
         if pairs == {}:
             sys.exit("Could not get the pairs from Binance to sort them by day volume. Exiting the script.")
 
@@ -708,11 +729,11 @@ class Trading:
 
         pool  = Pool()
         func1 = partial(GetVolume)
-        pool.map(func1, pairs[quoteasset])
+        pool.map(func1, pairs[quote])
         pool.close()
         pool.join()
 
-        # for pair in pairs[quoteasset]:
+        # for pair in pairs[quote]:
         #     GetVolume(pair)
 
         sorted_volumes  = {k: v for k, v in sorted(stats.items(), key=lambda item: item[1], reverse=True)}
@@ -732,9 +753,39 @@ class Trading:
             print(f'No position on {pair} to liquidate.')
 
 
+    def check_database_correctness(self):
+        """ Check if the values stored in the db are identical to those on Binance. If not, exit the script."""
+        # General account information : check account_balances.db
+        # https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#account-information-user_data
+        for quote in self.existing_quoteassets:
+            # Check the 'free' balances
+            binance_real_quote_balance = Decimal(self.exchange.GetAccountBalance(quote).get('free'))                        # The reference
+            db_real_quote_balance      = Decimal(self.database.get_db_account_balance(quote=quote, real_balance=True))
+            db_internal_quote_balance  = Decimal(self.database.get_db_account_balance(quote=quote, internal_balance=True))
+            print('In account_balances.db : real_balance     != Binance balance' if db_real_quote_balance     != binance_real_quote_balance else '')
+            print('In account_balances.db : internal_balance != Binance balance' if db_internal_quote_balance != binance_real_quote_balance else '')
+            print('In account_balances.db : internal_balance != real_balance'    if db_internal_quote_balance != db_real_quote_balance      else '')
+
+            # Check the 'locked' balances
+            binance_real_locked = Decimal(self.exchange.GetAccountBalance(quote).get('locked'))                        # The reference
+            db_real_locked      = Decimal(self.database.get_db_account_balance(quote=quote, real_locked=True))
+            db_internal_locked  = Decimal(self.database.get_db_account_balance(quote=quote, internal_locked=True))
+            print('In account_balances.db : db_real_locked     != Binance locked' if db_real_locked     != binance_real_locked else '')
+            print('In account_balances.db : db_internal_locked != Binance locked' if db_internal_locked != binance_real_locked else '')
+            print('In account_balances.db : db_internal_locked != db_real_locked' if db_internal_locked != db_real_locked      else '')
+
+        # sys.exit('Incorrect balances in account_balances.db. Exiting the script.')
+
+
+        # Trades list
+        # https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#account-trade-list-user_data
+
+
+
+
 if __name__ == "__main__":
 
-    trading = Trading(paper_trading      = False,
+    trading = Trading(paper_trading      = True,
                       timeframe          = '1m',
                       quotes_to_trade_on = ['ETH'],
                       bots_per_quote     = 2,

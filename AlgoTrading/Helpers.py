@@ -1,3 +1,4 @@
+from decimal import Decimal
 import datetime
 from   datetime import datetime, timedelta
 
@@ -89,3 +90,64 @@ class HelperMethods:
 
     def locked_in_trades(self, quote:str):
         return sum([float(dict(bot)['quote_lockedintrade']) for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to exit' if dict(bot)['quote']==quote])
+
+    @staticmethod
+    def RoundToValidPrice(bot:dict, price:Decimal)->Decimal:
+        """ Addresses the issue of PRICE_FILTER """
+        # https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#price_filter
+
+        """ The price/stopPrice must obey 3 rules :
+                price >= minPrice
+                price <= maxPrice
+                (price-minPrice) % tickSize == 0 
+        """
+
+        minPrice = Decimal(bot['minPrice'])
+        maxPrice = Decimal(bot['maxPrice'])
+        tickSize = Decimal(bot['tickSize'])
+
+        if minPrice <= price <= maxPrice:
+            if (price-minPrice) % tickSize == 0:
+                # Round down to the nearest tickSize and remove zeros after
+                newPrice = price // tickSize * tickSize
+                # print("Attention on {pair} : the price {price} is incorrect and has been rounded to {newPrice}".format(pair=pair, price=price, newPrice=newPrice))
+                return newPrice
+            else:
+                return price
+
+        if price < minPrice:
+            # print("Attention on {pair} : the price {price} is too low and has been set to {minPrice}".format(pair=pair, price=price, minPrice=minPrice))
+            return minPrice
+
+        if price > maxPrice:
+            # print("Attention on {pair} : the price {price} is too high and has been set to {maxPrice}".format(pair=pair, price=price, maxPrice=maxPrice))
+            return maxPrice
+
+    @staticmethod
+    def RoundToValidQuantity(bot:dict, quantity:Decimal)->Decimal:
+            """ Addresses the issue of LOT_SIZE """
+            # https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#lot_size
+
+            """ The price/stopPrice must obey 3 rules :
+                    quantity >= minQty
+                    quantity <= maxQty
+                    (quantity-minQty) % stepSize == 0
+            """
+
+            minQty   = Decimal(bot['minQty'])
+            maxQty   = Decimal(bot['maxQty'])
+            stepSize = Decimal(bot['stepSize'])
+
+            if minQty <= quantity <= maxQty:
+                if (quantity-minQty) % stepSize != 0:
+                    # Round down to the nearest stepSize and remove zeros after
+                    newQuantity = quantity // stepSize * stepSize
+                    return newQuantity
+                else:
+                    return quantity
+
+            if quantity < minQty:
+                return minQty
+
+            if quantity > maxQty:
+                return maxQty

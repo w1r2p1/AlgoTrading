@@ -41,7 +41,13 @@ class BotDatabase:
             baseAssetPrecision   	int,
             quotePrecision      	int,
             BNB_precision			int,
-            MinNotional				text
+            MinNotional				text,
+            minPrice                text,
+		    maxPrice                text,
+		    tickSize                text,
+		    minQty                  text,
+		    maxQty                  text,
+		    stepSize                text
 			)''')
 
 		c.execute('''CREATE TABLE IF NOT EXISTS orders (
@@ -93,7 +99,7 @@ class BotDatabase:
 
 		values = tuple(param for param in bot_params.values())
 
-		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
+		c.execute('INSERT INTO bots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
 		conn.commit()
 
 
@@ -125,7 +131,7 @@ class BotDatabase:
 			return False
 
 
-	def UpdateBot(self, pair:str, **kwargs):
+	def update_bot(self, pair:str, **kwargs):
 		""" Updates a Bot within the Database. """
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)

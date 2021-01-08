@@ -172,21 +172,6 @@ class Binance:
 				return pair_info					# {'symbol': 'ETHBTC', 'status': 'TRADING', 'baseAsset': 'ETH', 'baseAssetPrecision': 8,.....}
 
 
-	def GetMinNotional(self, pair)->str:
-		""" Get the minimum notional value allowed for an order on a pair.
-		 	minNotional = price*quantity (average price for market orders). """
-
-		pair_info = self.GetMetadataOfPair(pair)
-
-
-		if pair_info:
-			for filtr in pair_info['filters']:
-				if filtr['filterType'] == 'MIN_NOTIONAL':
-					return filtr['minNotional']
-		else:
-			return '0'
-
-
 	def GetAccountData(self) -> dict:
 		""" Gets Balances & Account Data """
 
@@ -204,16 +189,16 @@ class Binance:
 		return account		# dict of all the data about the account : {'makerCommission': 10, 'takerCommission': 10, ...., 'balances': []}
 
 
-	def GetAccountBalance(self, quote:str):
+	def GetAccountBalance(self, asset:str):
 
 		account_data = self.GetAccountData()
 
 		if account_data == {}:
-			return f"Could not get account data on {quote} from Binance."
+			return f"Could not get account data on {asset} from Binance."
 
 		balances = account_data['balances']
 		for balance in balances:
-			if balance['asset'] in quote:
+			if balance['asset'] in asset:
 				return balance
 
 
@@ -454,7 +439,22 @@ class Binance:
 			return int(time.time()*1000)
 
 
-	def RoundToValidPrice(self, pair:str, price:Decimal)->Decimal:
+	def GetMinNotional(self, pair)->str:
+		""" Get the minimum notional value allowed for an order on a pair.
+		 	minNotional = price*quantity (average price for market orders). """
+
+		pair_info = self.GetMetadataOfPair(pair)
+
+
+		if pair_info:
+			for filtr in pair_info['filters']:
+				if filtr['filterType'] == 'MIN_NOTIONAL':
+					return filtr['minNotional']
+		else:
+			return '0'
+
+
+	def get_valid_price_info(self, pair:str):
 		""" Addresses the issue of PRICE_FILTER """
 		# https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#price_filter
 
@@ -484,26 +484,10 @@ class Binance:
 		maxPrice = Decimal(pr_filter['maxPrice'])
 		tickSize = Decimal(pr_filter['tickSize'])
 
-
-		if minPrice <= price <= maxPrice:
-			if (price-minPrice) % tickSize == 0:
-				# Round down to the nearest tickSize and remove zeros after
-				newPrice = price // tickSize * tickSize
-				# print("Attention on {pair} : the price {price} is incorrect and has been rounded to {newPrice}".format(pair=pair, price=price, newPrice=newPrice))
-				return newPrice
-			else:
-				return price
-
-		if price < minPrice:
-			# print("Attention on {pair} : the price {price} is too low and has been set to {minPrice}".format(pair=pair, price=price, minPrice=minPrice))
-			return minPrice
-
-		if price > maxPrice:
-			# print("Attention on {pair} : the price {price} is too high and has been set to {maxPrice}".format(pair=pair, price=price, maxPrice=maxPrice))
-			return maxPrice
+		return minPrice, maxPrice, tickSize
 
 
-	def RoundToValidQuantity(self, pair:str, quantity:Decimal)->Decimal:
+	def get_valid_quantity_info(self, pair:str):
 		""" Addresses the issue of LOT_SIZE """
 		# https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#lot_size
 
@@ -533,16 +517,4 @@ class Binance:
 		maxQty   = Decimal(pr_filter['maxQty'])
 		stepSize = Decimal(pr_filter['stepSize'])
 
-		if minQty <= quantity <= maxQty:
-			if (quantity-minQty) % stepSize != 0:
-				# Round down to the nearest stepSize and remove zeros after
-				newQuantity = quantity // stepSize * stepSize
-				return newQuantity
-			else:
-				return quantity
-
-		if quantity < minQty:
-			return minQty
-
-		if quantity > maxQty:
-			return maxQty
+		return minQty, maxQty, stepSize

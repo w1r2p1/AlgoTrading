@@ -1,4 +1,6 @@
 from Exchange import Binance
+from Database import BotDatabase
+from Helpers import HelperMethods
 
 from decimal  import Decimal, getcontext
 import plotly.graph_objs as go
@@ -18,6 +20,8 @@ class BackTesting:
 
 	def __init__(self, timeframe):
 		self.exchange  = Binance(filename='../assets/credentials.txt')
+		self.database  = BotDatabase(name="../assets/database_paper.db")
+		self.helpers   = HelperMethods(database=self.database)
 		self.timeframe = timeframe
 		self.df        = pd.DataFrame()
 
@@ -73,6 +77,8 @@ class BackTesting:
 	def backtest(self, quote:str, pair:str, starting_balances:dict, bbands_length:int, bbands_std, indic:str, indic_length:int, alloc_pct:int, stop_loss_pct, plot:bool=False):
 		""" Mean Reversion : If the spread is out of the bbands, signal.
 			The indicator is a filter, for the buys and sells. 				"""
+
+		bot = dict(self.database.GetBot(pair=pair))
 
 		self.prepare_df(quote=quote, pair=pair)
 
@@ -133,7 +139,7 @@ class BackTesting:
 					price_base_next_minute = Decimal(self.df[pair+'_m'].iloc[i+1])
 					self.df.loc[self.df.index[i], 'sellprice_'+pair] = price_base_next_minute
 
-					base_quantity_to_sell   = self.exchange.RoundToValidQuantity(pair=pair, quantity=base_balance*alloc_pct/100)
+					base_quantity_to_sell   = self.helpers.RoundToValidQuantity(bot=bot, quantity=base_balance*alloc_pct/100)
 					quote_quantity_sell     = base_quantity_to_sell*price_base_next_minute
 					fee_in_quote_sell       = quote_quantity_sell*Decimal(0.075)/Decimal(100)
 					received_quote_quantity = quote_quantity_sell - fee_in_quote_sell						# What we get in quote from the sell
@@ -163,7 +169,7 @@ class BackTesting:
 				price_base_next_minute = Decimal(self.df[pair+'_m'].iloc[i+1])
 				self.df.loc[self.df.index[i], 'buyprice_'+pair] = price_base_next_minute
 
-				base_quantity_to_buy   = self.exchange.RoundToValidQuantity(pair=pair, quantity=quote_balance/price_base_this_minute*alloc_pct/100)
+				base_quantity_to_buy   = self.helpers.RoundToValidQuantity(bot=bot, quantity=quote_balance/price_base_this_minute*alloc_pct/100)
 				quote_quantity_buy     = base_quantity_to_buy*price_base_next_minute
 				fee_in_base_buy        = base_quantity_to_buy*Decimal(0.075)/Decimal(100)
 				received_base_quantity = base_quantity_to_buy - fee_in_base_buy						# What we get in base from the buy

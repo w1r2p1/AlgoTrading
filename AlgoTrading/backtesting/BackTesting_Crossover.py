@@ -72,6 +72,7 @@ class BackTesting:
 
 		bot = dict(self.database.GetBot(pair=pair))
 
+		print('got the bot')
 		self.prepare_df(quote=quote, pair=pair)
 
 		fast_name = f'{indic}_{length_fast}'

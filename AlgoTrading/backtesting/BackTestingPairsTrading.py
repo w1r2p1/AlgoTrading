@@ -1,4 +1,6 @@
 from Exchange import Binance
+from Database import BotDatabase
+from Helpers import HelperMethods
 
 from decimal  import Decimal, getcontext
 import plotly.graph_objs as go
@@ -32,6 +34,8 @@ class BackTestingPairsTrading:
 
 	def __init__(self, timeframe):
 		self.exchange  = Binance(filename='../assets/credentials.txt')
+		self.database  = BotDatabase(name="../assets/database_paper.db")
+		self.helpers   = HelperMethods(database=self.database)
 		self.timeframe = timeframe
 		self.df        = pd.DataFrame()
 
@@ -98,6 +102,9 @@ class BackTestingPairsTrading:
 
 
 	def backtest(self, quote:str, pairs:list, starting_balances:dict, length:int, std, alloc_pct:int, plot:bool=False):
+
+		bot_pair0 = dict(self.database.GetBot(pair=pairs[0]))
+		bot_pair1 = dict(self.database.GetBot(pair=pairs[1]))
 
 		self.prepare_df(quote=quote, pairs=pairs)
 
@@ -222,11 +229,11 @@ class BackTestingPairsTrading:
 				if method=='log_spread':
 					quantity_pair1_to_buy   = received_quote_quantity/price_pair1_next_minute						# quantity_pair1_to_buy = quantity_pair0_to_sell*ratio
 					fee_in_pair1_buy        = quantity_pair1_to_buy*Decimal(0.075)/Decimal(100)
-					received_quantity_pair1 = self.exchange.RoundToValidQuantity(pair=pairs[1], quantity=quantity_pair1_to_buy-fee_in_pair1_buy)
+					received_quantity_pair1 = self.helpers.RoundToValidQuantity(bot=bot_pair1, quantity=quantity_pair1_to_buy-fee_in_pair1_buy)
 				elif method=='Regression':
 					quantity_pair1_to_buy   = received_quote_quantity/Decimal(beta)/price_pair1_next_minute
 					fee_in_pair1_buy        = quantity_pair1_to_buy*Decimal(0.075)/Decimal(100)
-					received_quantity_pair1 = self.exchange.RoundToValidQuantity(pair=pairs[1], quantity=quantity_pair1_to_buy-fee_in_pair1_buy)
+					received_quantity_pair1 = self.helpers.RoundToValidQuantity(bot=bot_pair1, quantity=quantity_pair1_to_buy-fee_in_pair1_buy)
 
 				balance_pair0 = Decimal('0')
 				balance_pair1 += received_quantity_pair1
@@ -268,11 +275,11 @@ class BackTestingPairsTrading:
 				if method=='log_spread':
 					quantity_pair0_to_buy   = received_quote_quantity/price_pair0_next_minute
 					fee_in_pair0_buy        = quantity_pair0_to_buy*Decimal(0.075)/Decimal(100)
-					received_quantity_pair0 = self.exchange.RoundToValidQuantity(pair=pairs[0], quantity=quantity_pair0_to_buy-fee_in_pair0_buy)
+					received_quantity_pair0 = self.helpers.RoundToValidQuantity(bot=bot_pair0, quantity=quantity_pair0_to_buy-fee_in_pair0_buy)
 				elif method=='Regression':
 					quantity_pair0_to_buy   = received_quote_quantity*Decimal(beta)/price_pair0_next_minute
 					fee_in_pair0_buy        = quantity_pair0_to_buy*Decimal(0.075)/Decimal(100)
-					received_quantity_pair0 = self.exchange.RoundToValidQuantity(pair=pairs[0], quantity=quantity_pair0_to_buy-fee_in_pair0_buy)
+					received_quantity_pair0 = self.helpers.RoundToValidQuantity(bot=bot_pair0, quantity=quantity_pair0_to_buy-fee_in_pair0_buy)
 
 				balance_pair0 += received_quantity_pair0
 				balance_pair0_previous = self.df.loc[:, 'balance_pair0'].dropna().iloc[-1]

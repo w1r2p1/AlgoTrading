@@ -210,20 +210,29 @@ class Trading:
                 print("\nTrading with a clocks difference of {time} ms.".format(time=self.exchange.TimeDifferenceWithBinance()))
 
                 buys  = dict()
-                pool  = Pool()
-                func1 = partial(self.buy_order, dict_to_fill=buys)
-                pool.map(func1, [dict(bot) for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to enter'])
-                pool.close()
-                pool.join()
-                print("\tChecked all pairs for buy  signals.")
-
                 sells = dict()
-                pool  = Pool()
-                func2 = partial(self.sell_order, dict_to_fill=sells)
-                pool.map(func2, [dict(bot) for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to exit'])
-                pool.close()
-                pool.join()
-                print("\tChecked all pairs for sell signals.")
+
+                # pool  = Pool()
+                # func1 = partial(self.buy_order, dict_to_fill=buys)
+                # pool.map(func1, [dict(bot) for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to enter'])
+                # pool.close()
+                # pool.join()
+                # print("\tChecked all pairs for buy  signals.")
+                #
+                # pool  = Pool()
+                # func2 = partial(self.sell_order, dict_to_fill=sells)
+                # pool.map(func2, [dict(bot) for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to exit'])
+                # pool.close()
+                # pool.join()
+                # print("\tChecked all pairs for sell signals.")
+
+                # Without multiprocessing
+                for bot in self.database.GetAllBots():
+                    if dict(bot)['status']=='Looking to enter':
+                        self.buy_order(dict_to_fill=buys, bot=dict(bot))
+                    if dict(bot)['status']=='Looking to exit':
+                        self.sell_order(dict_to_fill=sells, bot=dict(bot))
+                print("\tChecked all pairs for signals.")
 
                 # Summary of the search
                 print_trades_sequence(buys_=buys, sells_=sells)
@@ -374,14 +383,17 @@ class Trading:
                                           Decimal(buy_order_result['executedQty']).normalize(),
                                           Decimal(buy_order_result['cummulativeQuoteQty']).normalize()]
 
-                    return dict_to_fill
 
             except Exception as e:
                 self.database.update_bot(pair=pair, status='', quote_allocation='')
                 print(f'\tError in processing a {"test" if self.paper_trading else ""} buy order on {pair}. Error : {e}.')
+                dict_to_fill[pair] = []
 
         else:
             self.database.update_bot(pair=pair, status='', quote_allocation='')
+            dict_to_fill[pair] = []
+
+        return dict_to_fill
 
 
     def sell_order(self, bot:dict, dict_to_fill:dict, **kwargs):
@@ -547,6 +559,11 @@ class Trading:
             except Exception as e:
                 # We don't update the error in the case of an error : it still needs to sell.
                 print(f'\tError in processing a {"test " if self.paper_trading else ""}sell order on {pair}. Error : {e}.')
+                dict_to_fill[pair] = []
+        else:
+            dict_to_fill[pair] = []
+
+        return dict_to_fill
 
 
     def send_text_to_telegram(self, message):

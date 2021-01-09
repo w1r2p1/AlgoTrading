@@ -106,14 +106,17 @@ class BackTesting:
 
 	def compute_indicators(self):
 
+		if self.strategy_name == 'Mean_Reversion_spread':
+			self.df.loc[:,'spread'] = np.log(self.df.loc[:,self.pair+'_h'].pct_change() + 1)
+
 		for indic_dict in self.indicators_dict.values():
 			indic           = indic_dict['indic']
-			indic_name      = indic_dict['indic_name']
+			indic_name      = (indic_dict['indic_name'],) if indic!='bbands' else ('bband_l', 'bband_m', 'bband_u')
 			indic_length    = indic_dict['indic_length']
 			indic_close_col = indic_dict['indic_close_col']
 
 			close = self.df.loc[:,self.pair+'_h'] if indic_close_col=='close' else indic_close_col
-			getattr(self.df.ta, indic)(close=close, length=indic_length, append=True, col_names=(indic_name,))
+			getattr(self.df.ta, indic)(close=close, length=indic_length, append=True, col_names=indic_name)
 
 
 	def find_signal(self, i:int)->str:
@@ -128,18 +131,25 @@ class BackTesting:
 			slow_shifted = self.df[self.indicators_dict['2']['indic_name']].iloc[i-1]
 			return 'buy' if fast_shifted < slow_shifted and fast > slow else 'sell' if fast_shifted > slow_shifted and fast < slow else ''
 
-		if self.strategy_name=='Mean_Reversion_simple':
-			price         = self.df[self.pair+'_h'].iloc[i]
-			price_shifted = self.df[self.pair+'_h'].iloc[i-1]
-			indic_value   = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
-			return 'buy' if price > indic_value > price_shifted else 'sell' if price < indic_value < price_shifted else ''
-
 		if self.strategy_name=='MA_slope':
 			ma            = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
 			slope         = self.df[self.indicators_dict['2']['indic_name']].iloc[i]
 			ma_shifted1   = self.df[self.indicators_dict['1']['indic_name']].iloc[i-1]
 			slope_shifted = self.df[self.indicators_dict['2']['indic_name']].iloc[i-1]
 			self.df.loc[self.df.index[i], 'signal'] = 'buy' if slope==0 and ma_shifted1>ma else 'sell' if slope==0 and ma_shifted1<ma else ''
+
+		if self.strategy_name=='Mean_Reversion_simple':
+			indic         = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
+			price_now     = Decimal(self.df[self.pair+'_h'].iloc[i])
+			price_shifted = Decimal(self.df[self.pair+'_h'].iloc[i-1])
+			self.df.loc[self.df.index[i], 'signal'] = 'buy' if price_now<price_shifted and price_now<indic else 'sell' if price_now>price_shifted and price_now>indic  else ''
+
+		if self.strategy_name=='Mean_Reversion_spread':
+			spread         = self.df['spread'].iloc[i]
+			spread_shifted = self.df['spread'].iloc[i-1]
+			bband_l		   = self.df['bband_l'].iloc[i]
+			bband_u		   = self.df['bband_u'].iloc[i]
+			self.df.loc[self.df.index[i],'signal'] = 'sell' if spread_shifted < spread and spread > bband_u else 'buy' if spread_shifted > spread and spread < bband_l else ''
 
 
 	def backtest(self):
@@ -176,6 +186,9 @@ class BackTesting:
 			# Look for a signal
 			self.df.loc[self.df.index[i],'signal'] = self.find_signal(i=i)
 
+			# price_above_indic = self.df[pair+'_h'].iloc[i] > self.df[indic_name].iloc[i]
+			# price_under_indic = self.df[pair+'_h'].iloc[i] < self.df[indic_name].iloc[i]
+
 			if status=='just bought': 	# ____________________________________________________________________________________________________________________________
 				# Sell either by signal or stop-loss
 				price_now    = Decimal(self.df[pair+'_h'].iloc[i])
@@ -183,6 +196,7 @@ class BackTesting:
 				stop_loss_trigger = (price_now/price_at_buy-1)*100 < Decimal(-stop_loss_pct)
 				increased_more_than_fees = (price_now/price_at_buy-1)*100 > 1
 
+				# if (self.df['signal'].iloc[i]=='sell' and increased_more_than_fees and price_above_indic) or stop_loss_trigger:
 				if (self.df['signal'].iloc[i]=='sell' and increased_more_than_fees) or stop_loss_trigger:
 
 					# To simulate the spread, we sell on the following minute candle.
@@ -211,7 +225,7 @@ class BackTesting:
 					self.df.loc[self.df.index[i], 'fees'] = fee_in_quote_sell
 					status = 'just sold'
 
-			elif self.df['signal'].iloc[i]=='buy' and status=='just sold':	# _____________________________________________________________________________________
+			elif self.df['signal'].iloc[i]=='buy' and status=='just sold': # and price_under_indic:	# _____________________________________________________________________________________
 
 				# To simulate the spread, we buy on the following minute candle (it has been shifted already, so it's on the same index).
 				price_base_this_minute = Decimal(self.df[pair+'_h'].iloc[i])
@@ -241,31 +255,35 @@ class BackTesting:
 				status = 'just bought'
 
 
-		# Compute profits and compare to buy and hold
-		base_balance_initiale  = self.df.loc[:, 'base_balance'].dropna().iloc[0]
-		base_balance_finale    = self.df.loc[:, 'base_balance'].dropna().iloc[-1]
-		quote_balance_initiale = self.df.loc[:, 'quote_balance'].dropna().iloc[0]
-		quote_balance_finale   = self.df.loc[:, 'quote_balance'].dropna().iloc[-1]
-		price_base_at_first_quotevalue = self.df.loc[self.df['base_balance'] == base_balance_initiale, pair+'_h'].iloc[0]
-		price_base_at_last_quotevalue  = self.df.loc[self.df['base_balance'] == base_balance_finale,   pair+'_h'].iloc[-1]
-		quote_profits = (Decimal(quote_balance_finale) / quote_balance_initiale - 1)*100
-		buy_hold_     = (price_base_at_last_quotevalue / price_base_at_first_quotevalue - 1)*100
+		if trades['nb_trades'] > 1:
+			# Compute profits and compare to buy and hold
+			base_balance_initiale  = self.df.loc[:, 'base_balance'].dropna().iloc[0]
+			base_balance_finale    = self.df.loc[:, 'base_balance'].dropna().iloc[-1]
+			quote_balance_initiale = self.df.loc[:, 'quote_balance'].dropna().iloc[0]
+			quote_balance_finale   = self.df.loc[:, 'quote_balance'].dropna().iloc[-1]
+			price_base_at_first_quotevalue = self.df.loc[self.df['base_balance'] == base_balance_initiale, pair+'_h'].iloc[0]
+			price_base_at_last_quotevalue  = self.df.loc[self.df['base_balance'] == base_balance_finale,   pair+'_h'].iloc[-1]
+			quote_profits = (Decimal(quote_balance_finale) / quote_balance_initiale - 1)*100
+			buy_hold_     = (price_base_at_last_quotevalue / price_base_at_first_quotevalue - 1)*100
 
-		# print(f'{quote} profits of {pair} = {round(quote_profits, 1)}%  (buy & hold = {round(buy_hold_, 1)}%)')
-		# print(f'Winning trades : {trades["nb_win_trades"]} ({int(trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"])*100)}%)')
-		# print(f'Losing trades  : {trades["nb_los_trades"]} ({int((1-trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"]))*100)}%)')
+			print(f'{self.quote} profits of {pair} = {round(quote_profits, 1)}%  (buy & hold = {round(buy_hold_, 1)}%)')
+			print(f'Winning trades : {trades["nb_win_trades"]} ({int(trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"])*100)}%)')
+			print(f'Losing trades  : {trades["nb_los_trades"]} ({int((1-trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"]))*100)}%)')
 
-		# Remove 0s & NaNs and compute metric
-		temp    = self.df.loc[:,'quote_balance'].astype(float)
-		cleaned = temp[np.where(temp, True, False)].dropna().pct_change()
-		metric  = sharpe_ratio(cleaned, annualization=1)
-		metric  = metric if abs(metric) != np.inf and not np.isnan(metric) else 0
-		# print(f'Sharp ratio : {round(metric,2)}')
+			# Remove 0s & NaNs and compute metric
+			temp    = self.df.loc[:,'quote_balance'].astype(float)
+			cleaned = temp[np.where(temp, True, False)].dropna().pct_change()
+			metric  = sharpe_ratio(cleaned, annualization=1)
+			metric  = metric if abs(metric) != np.inf and not np.isnan(metric) else 0
+			# print(f'Sharp ratio : {round(metric,2)}')
 
-		if self.plot:
-			self.plot_backtest(trades=trades, metri=metric)
+			if self.plot:
+				self.plot_backtest(trades=trades, metri=metric)
 
-		return quote_profits, metric
+			return quote_profits, metric
+		else:
+			print("Strategy didn't buy or sell.")
+			return 0, 0
 
 
 	def plot_backtest(self, **kwargs):
@@ -277,6 +295,8 @@ class BackTesting:
 		trades        = kwargs.get('trades', {})
 		metric        = kwargs.get('metric', 0)
 
+		print(self.df.columns)
+		print(self.df)
 
 		min_indice = -2000
 		max_indice = None
@@ -355,6 +375,9 @@ class MpGridSearch:
 		self.results                  = dict()
 		self.results['length_fast']   = []
 		self.results['length_slow']   = []
+		self.results['length']   	  = []
+		self.results['length_slope']  = []
+		self.results['length_bbands'] = []
 		self.results['stop_loss_pct'] = []
 		self.results['quote_profits'] = []
 
@@ -363,15 +386,20 @@ class MpGridSearch:
 			self.slow          = np.linspace(start=30, stop=100, num=8)
 			self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
 			self.paramlist = list(itertools.product(self.fast, self.slow, self.stop_loss_pct))
-		if strategy_name=='Mean_Reversion_simple':
-			self.indic         = np.linspace(start=5,  stop=20,  num=4)
-			self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
-			self.paramlist = list(itertools.product(self.indic, self.stop_loss_pct))
 		if strategy_name=='MA_slope':
 			self.indic         = np.linspace(start=5,  stop=20,  num=4)
 			self.slope         = np.linspace(start=30, stop=100, num=8)
 			self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
 			self.paramlist = list(itertools.product(self.indic, self.slope, self.stop_loss_pct))
+		if strategy_name=='Mean_Reversion_simple':
+			self.indic         = np.linspace(start=5,  stop=20,  num=4)
+			self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+			self.paramlist = list(itertools.product(self.indic, self.stop_loss_pct))
+		if strategy_name=='Mean_Reversion_spread':
+			self.indic         = np.linspace(start=5,  stop=20,  num=4)
+			self.bbands_length = np.linspace(start=5,  stop=20,  num=4)
+			self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+			self.paramlist = list(itertools.product(self.indic, self.bbands_length, self.stop_loss_pct))
 
 	def run_backtest(self, params:list):
 
@@ -379,13 +407,16 @@ class MpGridSearch:
 		indic_2 = {}
 
 		if self.strategy_name=='Crossover':
-			indic_1 = dict(indicator='ssf',   length=int(params[0])*24, close='close')
-			indic_2 = dict(indicator='ssf',   length=int(params[1])*24, close='close')
-		elif self.strategy_name=='Mean_Reversion_simple':
-			indic_1	= dict(indicator='ssf',   length=int(params[0]),    close='close')
+			indic_1 = dict(indicator='ssf',    length=int(params[0])*24, close='close')
+			indic_2 = dict(indicator='ssf',    length=int(params[1])*24, close='close')
 		elif self.strategy_name=='MA_slope':
-			indic_1 = dict(indicator='ssf',   length=int(params[0]), close='close')
-			indic_2 = dict(indicator='slope', length=int(params[1]), close=f'ssf_{int(params[0])}')
+			indic_1 = dict(indicator='ssf',    length=int(params[0]),    close='close')
+			indic_2 = dict(indicator='slope',  length=int(params[1]),    close=f'ssf_{int(params[0])}')
+		elif self.strategy_name=='Mean_Reversion_simple':
+			indic_1	= dict(indicator='ssf',    length=int(params[0]),    close='close')
+		elif self.strategy_name=='Mean_Reversion_spread':
+			indic_1	= dict(indicator='ssf',    length=int(params[0]),    close='close')
+			indic_2	= dict(indicator='bbands', length=int(params[1]),    close='spread')
 
 		backtester = BackTesting(self.timeframe,
 								 quote   		   = 'BTC',
@@ -406,11 +437,13 @@ class MpGridSearch:
 		if self.strategy_name=='Crossover':
 			self.results['length_fast'].append(params[0])
 			self.results['length_slow'].append(params[1])
-		elif self.strategy_name=='Mean_Reversion_simple':
-			self.results['length'].append(params[0])
+
 		elif self.strategy_name=='MA_slope':
 			self.results['length'].append(params[0])
 			self.results['length_slope'].append(params[1])
+		elif self.strategy_name=='Mean_Reversion_spread':
+			self.results['length'].append(params[0])
+			self.results['length_bbands'].append(params[1])
 
 		self.results['stop_loss_pct'].append(params[-1])
 		self.results['quote_profits'].append(quote_profits_)
@@ -491,20 +524,22 @@ class MpGridSearch:
 if __name__ == '__main__':
 
 	""" Run a single backtest """
-	# BackTesting(timeframe		  = '1h',
-	# 			quote    		  = 'BTC',
-	# 			pair      		  = 'ETHBTC',
-	# 			strategy_name     = 'Mean_Reversion_simple',									# Crossover, Mean_Reversion_simple, MA_slope
-	# 			starting_balances = dict(quote=1, base=0),
-	# 			# indic_1			  = dict(indicator='ssf', length=5*24,  close='close'),		# Crossover	( best : 5*24, 40*24 )
-	# 			# indic_2			  = dict(indicator='ssf', length=40*24, close='close'),		# Crossover
-	# 			indic_1			  = dict(indicator='ssf', length=500,  close='close'),			# Mean_Reversion_simple
-	# 			# indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
-	# 			# indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
-	# 			alloc_pct         = 100,
-	# 			plot              = True,
-	# 			stop_loss_pct     = 2,
-	# 			).backtest()
+	BackTesting(timeframe		  = '1h',
+				quote    		  = 'BTC',
+				pair      		  = 'ETHBTC',
+				strategy_name     = 'Crossover',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread
+				starting_balances = dict(quote=1, base=0),
+				indic_1			  = dict(indicator='ssf', length=5*24,  close='close'),		# Crossover	( best : 5*24, 40*24 )
+				indic_2			  = dict(indicator='ssf', length=40*24, close='close'),		# Crossover
+				# indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
+				# indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
+				# indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
+				# indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
+				# indic_2			  = dict(indicator='bbands', length=80, close='spread'),		# Mean_Reversion_spread
+				alloc_pct         = 100,
+				plot              = True,
+				stop_loss_pct     = 2,
+				).backtest()
 
 
 	# results                  = dict()
@@ -569,7 +604,7 @@ if __name__ == '__main__':
 	# fig.show()
 
 	""" Run a grid search """
-	MpGridSearch(timeframe     = '1h',
-				 pair          = 'ETHBTC',
-				 strategy_name = 'MA_slope',									# Crossover, Mean_Reversion_simple, MA_slope
-				 ).run_grid_search()
+	# MpGridSearch(timeframe     = '1h',
+	# 			 pair          = 'ETHBTC',
+	# 			 strategy_name = 'MA_slope',									# Crossover, Mean_Reversion_simple, MA_slope
+	# 			 ).run_grid_search()

@@ -27,13 +27,15 @@ from rtchange import Finder
 class ModelSelection:
 
     def __init__(self, quote, pair, timeframe, side, log):
-        self.df = self.get_df(quote=quote, pair=pair, timeframe=timeframe, log=log)
+
         self.quote = quote
         self.pair  = pair
         self.side  = side
-        self.timeframe = timeframe
         self.log   = log
-        # self.histos_dict = self.histograms_from_CSV(file=f'histograms/{quote}/{timeframe}/{pair}_{timeframe}_{side}')
+        self.timeframe = timeframe
+
+        self.df = self.get_df()
+        self.histos_dict = self.histograms_from_CSV()
 
         self.momentum = dict(
             ao          = (5,20),
@@ -346,11 +348,10 @@ class ModelSelection:
         # Work with all the indicators defined in the __init__
         df_probas = self.compute_indicators(self.df).dropna(axis='columns').dropna(axis='index')
 
-
         print(f"\tFitting a {sklearn_model} model")
 
         # Fit and work on a smaller portion of the df
-        max_ = int(len(df_probas)*0.7)
+        max_ = int(len(df_probas)*0.75)
         df_pour_fit = df_probas.iloc[:max_].dropna(axis='columns')
         X = df_pour_fit[list(df_pour_fit.columns[7:])]
         Y = df_pour_fit[self.side]
@@ -451,13 +452,14 @@ class ModelSelection:
         # loaded_model = pickle.load(open(model_file, 'rb'))
         loaded_model = fit_model()
 
-        # Estimate the accuracy on the whole set
+        # Estimate the accuracy on the train set
         df_pour_fit.loc[:,'predictions']      = loaded_model.predict(X)
         # df_pour_fit.loc[:,'zero_probability'] = loaded_model.predict_proba(X)[:,0]
         # df_pour_fit.loc[:,'one_probability']  = loaded_model.predict_proba(X)[:,1]
         df_pour_fit.loc[:,'predictions_adjusted'] = np.where(df_pour_fit['predictions']==1, df_pour_fit['close'], np.nan)
         df_pour_fit.loc[:,'truth_adjusted']       = np.where(df_pour_fit[self.side]==1,     df_pour_fit['close'], np.nan)
 
+        # Estimate the accuracy on the test set
         df_outofsample = df_probas.iloc[max_:]
         X_outpofsample = df_outofsample[list(df_outofsample.columns[7:])]
         Y_outpofsample = df_outofsample[self.side].astype(int)
@@ -465,14 +467,7 @@ class ModelSelection:
         df_outofsample.loc[:,'outofsample_predictions_adjusted'] = np.where(df_outofsample['outofsample_predictions']==1, df_outofsample['close'], np.nan)
         df_outofsample.loc[:,'outofsample_truth_adjusted']       = np.where(df_outofsample[self.side]==1,                 df_outofsample['close'], np.nan)
 
-        # # Plot the results with matplotlib
-        # plt.figure(figsize = (16,12))
-        # # plt.scatter(df_pour_fit.index, df_pour_fit['one_probability'],  color='black',  marker='+')
-        # plt.scatter(df_pour_fit.index, df_pour_fit.loc[:,'predictions'],  color='black',  marker='+')
-        # # plt.scatter(X_train.index, loaded_model.predict_proba(X_train)[:,1],  color='black',  marker='+')
-        # plt.title(f'{sklearn_model} - {self.side} probabilities')
-        # plt.show()
-
+        # Print some metrics
         counts_truth = df_outofsample.loc[:,self.side].value_counts().to_dict()
         nb_truth = counts_truth[list(counts_truth.keys())[1]]
         nb_detec = getattr(df_outofsample.loc[:,'outofsample_predictions'].value_counts().to_dict(), str(1.0), 0)
@@ -481,120 +476,121 @@ class ModelSelection:
 
         # ________________________________________________________________________________________________________
 
-        fig  = go.Figure()
-        min_ = 0
-        max_ = len(df_probas.index)
+        plot = True
+        if plot :
+            fig  = go.Figure()
+            min_ = 0
+            max_ = len(df_probas.index)
 
-        # plot the log returns for this pair
-        fig.add_trace(go.Scatter(x    = df_pour_fit.index[:max_],
-                                 y    = df_pour_fit['close'][:max_],
-                                 mode = 'lines',
-                                 name = 'Log returns',
-                                 ))
-        fig.update_yaxes(title_text  = "<b>" + self.pair.replace(self.quote, '') + "</b> log returns")
-        fig.update_layout({"yaxis" : {"zeroline" : True},
-                           "title" : f'{sklearn_model} - {self.side} predictions and truth.\nCustom {round(nb_detec/nb_truth*100,1)}% accuracy.'})
-
-
-        # Add the train pivots
-        fig.add_trace(go.Scatter(x    = df_pour_fit.index[:max_],
-                                 y    = df_pour_fit['truth_adjusted'][:max_],
-                                 mode   = "markers",
-                                 marker = dict(size   = 9,
-                                               color  = 'green',
-                                               symbol = 'cross',
-                                               ),
-                                 name = f'{self.side} pivots'))
-
-        # Add the predicted train pivots
-        fig.add_trace(go.Scatter(x    = df_pour_fit.index[:max_],
-                                 y    = df_pour_fit['predictions_adjusted'][:max_],
-                                 mode   = "markers",
-                                 marker = dict(size   = 10,
-                                               color  = 'red',
-                                               symbol = 'circle-open',
-                                               ),
-                                 name = f'Predicted {self.side} pivots'))
-
-        # Out of sample _______________
-        # Log returns
-        fig.add_trace(go.Scatter(x    = df_outofsample.index,
-                                 y    = df_outofsample['close'],
-                                 mode = 'lines',
-                                 name = 'Out of sample Log returns',
-                                 ))
-        # Add the test pivots
-        fig.add_trace(go.Scatter(x    = df_outofsample.index,
-                                 y    = df_outofsample['outofsample_truth_adjusted'],
-                                 mode   = "markers",
-                                 marker = dict(size   = 10,
-                                               color  = 'blue',
-                                               symbol = 'cross',
-                                               ),
-                                 name = f'Out of sample {self.side} pivots'))
-
-        # Add the predicted test pivots
-        fig.add_trace(go.Scatter(x    = df_outofsample.index,
-                                 y    = df_outofsample['outofsample_predictions_adjusted'],
-                                 mode   = "markers",
-                                 marker = dict(size   = 10,
-                                               color  = 'red',
-                                               symbol = 'circle-open',
-                                               ),
-                                 name = f'Predicted {self.side} pivots'))
-
-        # Layout for the main graph
-        fig.update_layout({
-            'margin': {'t': 100, 'b': 20},
-            'height': 800,
-            'hovermode': 'x',
-            'legend_orientation':'h',
-
-            'xaxis'  : {
-                'showline'      : True,
-                'zeroline'      : False,
-                'showgrid'      : False,
-                'showticklabels': True,
-                'rangeslider'   : {'visible': False},
-                'showspikes'    : True,
-                'spikemode'     : 'across+toaxis',
-                'spikesnap'     : 'cursor',
-                'spikethickness': 0.5,
-                'color'         : '#a3a7b0',
-            },
-            'yaxis'  : {
-                # 'autorange'      : True,
-                # 'rangemode'     : 'normal',
-                # 'fixedrange'    : False,
-                'showline'      : False,
-                'showgrid'      : False,
-                'showticklabels': True,
-                'ticks'         : '',
-                'showspikes'    : True,
-                'spikemode'     : 'across+toaxis',
-                'spikesnap'     : 'cursor',
-                'spikethickness': 0.5,
-                'spikecolor'    : '#a3a7b8',
-                'color'         : '#a3a7b0',
-            },
-            'yaxis2' : {
-                # "fixedrange"    : True,
-                'showline'      : False,
-                'zeroline'      : False,
-                'showgrid'      : False,
-                'showticklabels': True,
-                'ticks'         : '',
-                # 'color'        : "#a3a7b0",
-            },
-            'legend' : {
-                'font'          : dict(size=15, color='#a3a7b0'),
-            },
-            'plot_bgcolor'  : '#23272c',
-            'paper_bgcolor' : '#23272c',
-        })
+            # plot the prices or log returns for this pair
+            fig.add_trace(go.Scatter(x    = df_pour_fit.index[:max_],
+                                     y    = df_pour_fit['close'][:max_],
+                                     mode = 'lines',
+                                     name = 'Log returns',
+                                     ))
+            fig.update_yaxes(title_text  = "<b>" + self.pair.replace(self.quote, '') + "</b> log returns")
+            fig.update_layout({"yaxis" : {"zeroline" : True},
+                               "title" : f'{sklearn_model} - {self.side} predictions and truth.\nCustom {round(nb_detec/nb_truth*100,1)}% accuracy.'})
 
 
-        fig.show()
+            # Add the train pivots
+            fig.add_trace(go.Scatter(x    = df_pour_fit.index[:max_],
+                                     y    = df_pour_fit['truth_adjusted'][:max_],
+                                     mode   = "markers",
+                                     marker = dict(size   = 9,
+                                                   color  = 'green',
+                                                   symbol = 'cross',
+                                                   ),
+                                     name = f'{self.side} pivots'))
+
+            # Add the predicted train pivots
+            fig.add_trace(go.Scatter(x    = df_pour_fit.index[:max_],
+                                     y    = df_pour_fit['predictions_adjusted'][:max_],
+                                     mode   = "markers",
+                                     marker = dict(size   = 10,
+                                                   color  = 'red',
+                                                   symbol = 'circle-open',
+                                                   ),
+                                     name = f'Predicted {self.side} pivots'))
+
+            # Out of sample _______________
+            # prices or Log returns
+            fig.add_trace(go.Scatter(x    = df_outofsample.index,
+                                     y    = df_outofsample['close'],
+                                     mode = 'lines',
+                                     name = 'Out of sample Log returns',
+                                     ))
+            # Add the test pivots
+            fig.add_trace(go.Scatter(x    = df_outofsample.index,
+                                     y    = df_outofsample['outofsample_truth_adjusted'],
+                                     mode   = "markers",
+                                     marker = dict(size   = 10,
+                                                   color  = 'blue',
+                                                   symbol = 'cross',
+                                                   ),
+                                     name = f'Out of sample {self.side} pivots'))
+
+            # Add the predicted test pivots
+            fig.add_trace(go.Scatter(x    = df_outofsample.index,
+                                     y    = df_outofsample['outofsample_predictions_adjusted'],
+                                     mode   = "markers",
+                                     marker = dict(size   = 10,
+                                                   color  = 'red',
+                                                   symbol = 'circle-open',
+                                                   ),
+                                     name = f'Predicted {self.side} pivots'))
+
+            # Layout for the main graph
+            fig.update_layout({
+                'margin': {'t': 100, 'b': 20},
+                'height': 800,
+                'hovermode': 'x',
+                'legend_orientation':'h',
+
+                'xaxis'  : {
+                    'showline'      : True,
+                    'zeroline'      : False,
+                    'showgrid'      : False,
+                    'showticklabels': True,
+                    'rangeslider'   : {'visible': False},
+                    'showspikes'    : True,
+                    'spikemode'     : 'across+toaxis',
+                    'spikesnap'     : 'cursor',
+                    'spikethickness': 0.5,
+                    'color'         : '#a3a7b0',
+                },
+                'yaxis'  : {
+                    # 'autorange'      : True,
+                    # 'rangemode'     : 'normal',
+                    # 'fixedrange'    : False,
+                    'showline'      : False,
+                    'showgrid'      : False,
+                    'showticklabels': True,
+                    'ticks'         : '',
+                    'showspikes'    : True,
+                    'spikemode'     : 'across+toaxis',
+                    'spikesnap'     : 'cursor',
+                    'spikethickness': 0.5,
+                    'spikecolor'    : '#a3a7b8',
+                    'color'         : '#a3a7b0',
+                },
+                'yaxis2' : {
+                    # "fixedrange"    : True,
+                    'showline'      : False,
+                    'zeroline'      : False,
+                    'showgrid'      : False,
+                    'showticklabels': True,
+                    'ticks'         : '',
+                    # 'color'        : "#a3a7b0",
+                },
+                'legend' : {
+                    'font'          : dict(size=15, color='#a3a7b0'),
+                },
+                'plot_bgcolor'  : '#23272c',
+                'paper_bgcolor' : '#23272c',
+            })
+
+            fig.show()
 
 
     def test_RTChange(self):
@@ -636,32 +632,28 @@ class ModelSelection:
         plt.show()
 
 
-    @staticmethod
-    def get_df(quote:str, pair:str, timeframe:str, log:bool=True):
+    def get_df(self):
         """ Gets the historic data from the csv file """
 
         # # Work on historical data from the csv file
-        historical_data_file = f'../historical_data/{quote}/{timeframe}/{pair}_{timeframe}'
+        historical_data_file = f'../historical_data/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}'
         dataframe_ = pd.read_csv(historical_data_file, sep='\t')
-
-        # del dataframe_['time']
-        # dataframe_.rename(columns={"open_log_returns": "open", "high_log_returns": "high", "low_log_returns": "low", "close_log_returns": "close"}, inplace=True)
 
         # Remove duplicated lines in the historical data if present
         dataframe = dataframe_.loc[~dataframe_.index.duplicated(keep='first')]
 
         # print(((len(dataframe.buys.dropna())+len(dataframe.sells.dropna()))/len(dataframe.close.dropna()))*100, '%')
 
-        if log:
+        if self.log:
             # Compute the log returns
-            # dataframe.loc[:,'open']  = np.log(dataframe.loc[:,'open'].pct_change()+1)
-            # dataframe.loc[:,'high']  = np.log(dataframe.loc[:,'high'].pct_change()+1)
-            # dataframe.loc[:,'low']   = np.log(dataframe.loc[:,'low'].pct_change()+1)
-            # dataframe.loc[:,'close'] = np.log(dataframe.loc[:,'close'].pct_change()+1)
-            dataframe.loc[:,'open_log']  = np.log(dataframe.loc[:,'open'].pct_change()+1)
-            dataframe.loc[:,'high_log']  = np.log(dataframe.loc[:,'high'].pct_change()+1)
-            dataframe.loc[:,'low_log']   = np.log(dataframe.loc[:,'low'].pct_change()+1)
-            dataframe.loc[:,'close_log'] = np.log(dataframe.loc[:,'close'].pct_change()+1)
+            dataframe.loc[:,'open']  = np.log(dataframe.loc[:,'open'].pct_change()+1)
+            dataframe.loc[:,'high']  = np.log(dataframe.loc[:,'high'].pct_change()+1)
+            dataframe.loc[:,'low']   = np.log(dataframe.loc[:,'low'].pct_change()+1)
+            dataframe.loc[:,'close'] = np.log(dataframe.loc[:,'close'].pct_change()+1)
+            # dataframe.loc[:,'open_log']  = np.log(dataframe.loc[:,'open'].pct_change()+1)
+            # dataframe.loc[:,'high_log']  = np.log(dataframe.loc[:,'high'].pct_change()+1)
+            # dataframe.loc[:,'low_log']   = np.log(dataframe.loc[:,'low'].pct_change()+1)
+            # dataframe.loc[:,'close_log'] = np.log(dataframe.loc[:,'close'].pct_change()+1)
 
         # Make the triggers values binary : -1/1
         # Doc : df.loc[<row selection>, <column selection>]
@@ -681,13 +673,14 @@ class ModelSelection:
 
         return dataframe.iloc[1:]
 
-    @staticmethod
-    def histograms_from_CSV(file)->dict:
+
+    def histograms_from_CSV(self)->dict:
         """ Lecture du .csv contenant les histogrames et transformation en Series. """
 
         hists_dict = dict()
 
-        for chunk in pd.read_csv(file,
+        histos_file = f'histograms/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}_{self.side}'
+        for chunk in pd.read_csv(histos_file,
                                  sep       = '\t',
                                  index_col = 0,
                                  chunksize = 13,             # Choose nbins+1. The chunksize parameter specifies the number of rows per chunk. (The last chunk may contain fewer than chunksize rows, of course.).
@@ -720,7 +713,7 @@ if __name__ == '__main__':
     # Path('models/' + quote_).mkdir(parents=True, exist_ok=True)
     # Path('probas/' + quote_).mkdir(parents=True, exist_ok=True)
 
-    print("_________ " + pair_ + " _________")
+    print(f"_________ {pair_} _________")
 
     for side_ in ['sells']:
         # for side_ in ['buys', 'sells']:
@@ -730,5 +723,4 @@ if __name__ == '__main__':
         for algo in ['RandomForest']:
             print(algo)
             model = ModelSelection(quote=quote_, pair=pair_, timeframe=timeframe_, side=side_, log=True)
-            model.fit_save__and_evaluate_model(sklearn_model=algo)                     # ['LogisticRegression', 'RandomForest', 'DecisionTree', 'MLP', 'KNeighbors']
-            # model.test_RTChange()
+            model.fit_save__and_evaluate_model(sklearn_model=algo)                                          # ['LogisticRegression', 'RandomForest', 'DecisionTree', 'MLP', 'KNeighbors']

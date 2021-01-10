@@ -94,7 +94,7 @@ class BackTesting:
 		# self.df.loc[:,pair+'_m'] = self.df.loc[:,pair+'_m'].shift(-1)
 
 		min_ = int(len(self.df.index)*0.3)
-		max_ = int(len(self.df.index)*1)
+		max_ = int(len(self.df.index)*0.35)
 		self.df = self.df.iloc[min_:max_]
 
 		# Drop all the non-necessary minute data : since we shifted, drop averythime at non hours indexes, where hours data is at NaN
@@ -180,8 +180,8 @@ class BackTesting:
 
 		# Go through all candlesticks
 		hourly_close = self.df.loc[:,pair+'_h']
-		for i in tqdm(range(self.longest_indicator, len(hourly_close)-1)):      # tqdm : progress bar
-			# for i in range(length_slow, len(hourly_close)-1):
+		# for i in tqdm(range(self.longest_indicator, len(hourly_close)-1)):      # tqdm : progress bar
+		for i in range(self.longest_indicator, len(hourly_close)-1):
 
 			# Look for a signal
 			self.df.loc[self.df.index[i],'signal'] = self.find_signal(i=i)
@@ -295,8 +295,8 @@ class BackTesting:
 		trades        = kwargs.get('trades', {})
 		metric        = kwargs.get('metric', 0)
 
-		print(self.df.columns)
-		print(self.df)
+		# print(self.df.columns)
+		# print(self.df)
 
 		min_indice = -2000
 		max_indice = None
@@ -382,8 +382,8 @@ class MpGridSearch:
 		self.results['quote_profits'] = []
 
 		if strategy_name=='Crossover':
-			self.fast          = np.linspace(start=5,  stop=20,  num=4)
-			self.slow          = np.linspace(start=30, stop=100, num=8)
+			self.fast          = np.linspace(start=2,  stop=10,  num=5)
+			self.slow          = np.linspace(start=20, stop=40, num=3)
 			self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
 			self.paramlist = list(itertools.product(self.fast, self.slow, self.stop_loss_pct))
 		if strategy_name=='MA_slope':
@@ -407,8 +407,8 @@ class MpGridSearch:
 		indic_2 = {}
 
 		if self.strategy_name=='Crossover':
-			indic_1 = dict(indicator='ssf',    length=int(params[0])*24, close='close')
-			indic_2 = dict(indicator='ssf',    length=int(params[1])*24, close='close')
+			indic_1 = dict(indicator='ssf',    length=int(params[0])*60, close='close')
+			indic_2 = dict(indicator='ssf',    length=int(params[1])*60, close='close')
 		elif self.strategy_name=='MA_slope':
 			indic_1 = dict(indicator='ssf',    length=int(params[0]),    close='close')
 			indic_2 = dict(indicator='slope',  length=int(params[1]),    close=f'ssf_{int(params[0])}')
@@ -432,7 +432,7 @@ class MpGridSearch:
 		quote_profits_, _ = backtester.backtest()
 
 		# print(f'length_fast: {int(params[0])}*24 \t length_slow: {int(params[1])}*24 \t stop_loss_pct: {round(params[2],2)}% \t BTC profits on ETH: {round(quote_profits_,2)}%')
-		print(f'{[params[i] for i in range(len(params))]}')
+		print(f'{[params[i] for i in range(len(params))]}, quote profit = {round(quote_profits_, 1)}%')
 
 		if self.strategy_name=='Crossover':
 			self.results['length_fast'].append(params[0])
@@ -524,22 +524,22 @@ class MpGridSearch:
 if __name__ == '__main__':
 
 	""" Run a single backtest """
-	BackTesting(timeframe		  = '1h',
-				quote    		  = 'BTC',
-				pair      		  = 'ETHBTC',
-				strategy_name     = 'Crossover',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread
-				starting_balances = dict(quote=1, base=0),
-				indic_1			  = dict(indicator='ssf', length=5*24,  close='close'),		# Crossover	( best : 5*24, 40*24 )
-				indic_2			  = dict(indicator='ssf', length=40*24, close='close'),		# Crossover
-				# indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
-				# indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
-				# indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
-				# indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
-				# indic_2			  = dict(indicator='bbands', length=80, close='spread'),		# Mean_Reversion_spread
-				alloc_pct         = 100,
-				plot              = True,
-				stop_loss_pct     = 2,
-				).backtest()
+	# BackTesting(timeframe		  = '1m',
+	# 			quote    		  = 'BTC',
+	# 			pair      		  = 'ETHBTC',
+	# 			strategy_name     = 'Crossover',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread
+	# 			starting_balances = dict(quote=1, base=0),
+	# 			indic_1			  = dict(indicator='ssf', length=1*60,  close='close'),		# Crossover	( best : 5*24, 40*24 )
+	# 			indic_2			  = dict(indicator='ssf', length=24*60, close='close'),		# Crossover
+	# 			# indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
+	# 			# indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
+	# 			# indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
+	# 			# indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
+	# 			# indic_2			  = dict(indicator='bbands', length=80, close='spread'),		# Mean_Reversion_spread
+	# 			alloc_pct         = 100,
+	# 			plot              = True,
+	# 			stop_loss_pct     = 2,
+	# 			).backtest()
 
 
 	# results                  = dict()
@@ -604,7 +604,7 @@ if __name__ == '__main__':
 	# fig.show()
 
 	""" Run a grid search """
-	# MpGridSearch(timeframe     = '1h',
-	# 			 pair          = 'ETHBTC',
-	# 			 strategy_name = 'MA_slope',									# Crossover, Mean_Reversion_simple, MA_slope
-	# 			 ).run_grid_search()
+	MpGridSearch(timeframe     = '1m',
+				 pair          = 'ETHBTC',
+				 strategy_name = 'Crossover',									# Crossover, Mean_Reversion_simple, MA_slope
+				 ).run_grid_search()

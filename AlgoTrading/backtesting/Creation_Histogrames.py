@@ -308,10 +308,10 @@ Variance  (VAR_{length})
                             timed = True,
                            )
 
-        self.df.to_csv(f'historical_data_with_inds/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}', sep='\t', index=False, na_rep="NaN")
+        # self.df.to_csv(f'historical_data_with_inds/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}', sep='\t', index=False, na_rep="NaN")
 
-        with pd.option_context('display.max_rows', 10, 'display.max_columns', None):
-            print(self.df)
+        # with pd.option_context('display.max_rows', 10, 'display.max_columns', None):
+        #     print(self.df)
 
 
     def computeandsave_histos(self, nbins:int, plot_hists:bool):
@@ -425,7 +425,7 @@ Variance  (VAR_{length})
 
         bins = 12
 
-        self.computeandsave_histos(nbins=bins, plot_hists=True)
+        self.computeandsave_histos(nbins=bins, plot_hists=False)
 
         for side in ['buys', 'sells']:
             print(f"\t{side[0:-1].title()} side")
@@ -596,12 +596,12 @@ if __name__ == "__main__":
 
     quote_     = 'BTC'
     pair_      = 'ETHBTC'
-    timeframe_ = '2h'
+    timeframe_ = '5m'
 
-    print("_________ " + pair_ + " _________")
+    print(f"_________ {pair_} _________")
 
     # In the project directory, create a nested directory for the quoteasset if not exists
-    Path('histograms/' + quote_).mkdir(parents=True, exist_ok=True)
+    Path( f'histograms/{quote_}/{timeframe_}').mkdir(parents=True, exist_ok=True)
     # Path('historical_data_with_inds/' + quote_).mkdir(parents=True, exist_ok=True)
 
     # Common name for the csv files that will contain the buy & sell histograms

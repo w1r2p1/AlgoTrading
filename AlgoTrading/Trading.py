@@ -37,7 +37,6 @@ class Strategy:
         """ Compute the indicators and look for a signal.
             Each strategy is only a template that needs to be fine tuned.
         """
-
         strategy_ = 'Crossover'
 
         if strategy_=='Crossover':

@@ -26,7 +26,7 @@ class Dashboard:
         self.database = BotDatabase(name="assets/database_paper.db") if self.paper_trading else BotDatabase(name="assets/database_live.db")
         self.helpers  = HelperMethods(database=self.database)
         self.strategy = Strategy(name='SSF_Crossover')
-        self.existing_quoteassets = set([dict(bot)['quote'] for bot in self.database.GetAllBots()])       # ['ETH', 'BTC']
+        self.existing_quoteassets = set([dict(bot)['quote'] for bot in self.database.get_all_bots()])       # ['ETH', 'BTC']
 
         self.app = dash.Dash(__name__,
                              external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -247,9 +247,9 @@ class Dashboard:
 
         # Set the correct start date of the plot based on the number of trades wanted
         if nb_last_trades == 'all':
-            displayed_trades = len(list(self.database.GetOrdersOfBot(pair)))
+            displayed_trades = len(list(self.database.get_orders_of_bot(pair)))
             # Get the bot's creation date
-            utc_creation_date_string = dict(self.database.GetBot(pair=pair))['utc_creation_date']				    # datetime string
+            utc_creation_date_string = dict(self.database.get_bot(pair=pair))['utc_creation_date']				    # datetime string
             utc_creation_date 		 = datetime.strptime(utc_creation_date_string, '%Y-%m-%d %H:%M:%S')			# datetime
             # Compute the starting date of the plot (datetime)
             start_date = utc_creation_date - timedelta(seconds=opening_candles_duration)
@@ -259,15 +259,15 @@ class Dashboard:
                 "annotations"   : [dict(x=utc_creation_date_string, y=0.05, xref='x', yref='paper', showarrow=False, xanchor='left', text='Bot created')],
             })
         else:
-            if len(list(self.database.GetOrdersOfBot(pair))) > int(nb_last_trades):
+            if len(list(self.database.get_orders_of_bot(pair))) > int(nb_last_trades):
                 #  If enough orders to display
                 displayed_trades = int(nb_last_trades)
-                first_trade_date_string = dict(list(self.database.GetOrdersOfBot(pair))[-int(nb_last_trades)])['transactTime']
+                first_trade_date_string = dict(list(self.database.get_orders_of_bot(pair))[-int(nb_last_trades)])['transactTime']
                 start_date              = datetime.strptime(first_trade_date_string, '%Y-%m-%d %H:%M:%S')
             else:
                 # If not enough orders, display all of them
-                displayed_trades = len(list(self.database.GetOrdersOfBot(pair)))
-                first_trade_date_string = dict(list(self.database.GetOrdersOfBot(pair))[0])['transactTime']
+                displayed_trades = len(list(self.database.get_orders_of_bot(pair)))
+                first_trade_date_string = dict(list(self.database.get_orders_of_bot(pair))[0])['transactTime']
                 start_date              = datetime.strptime(first_trade_date_string, '%Y-%m-%d %H:%M:%S')
 
 
@@ -328,7 +328,7 @@ class Dashboard:
                                          name = colname))
 
         # Get the all the orders we did on this pair
-        orders = self.database.GetOrdersOfBot(pair=pair)
+        orders = self.database.get_orders_of_bot(pair=pair)
         buys  = None
         sells = None
 
@@ -401,11 +401,11 @@ class Dashboard:
         # Prepare the bootstrap layout for the stats on the pair and the graph
 
         # Check if the bot sold at least one time and adapt what's displayed
-        if len(list(self.database.GetOrdersOfBot(pair))) > 1:
-            profit = f"{dict(self.database.GetBot(pair=pair))['bot_profit']} {bot['quote']}"
+        if len(list(self.database.get_orders_of_bot(pair))) > 1:
+            profit = f"{dict(self.database.get_bot(pair=pair))['bot_profit']} {bot['quote']}"
 
             profit_minus_fees = "{profit_minus_fees} {quote}".format(quote        = bot['quote'],
-                                                                     profit_minus_fees = dict(self.database.GetBot(pair=pair))['bot_profit_minus_fees'])
+                                                                     profit_minus_fees = dict(self.database.get_bot(pair=pair))['bot_profit_minus_fees'])
 
             average_hold_duration_string = "{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.pair_average_hold_duration(pair).days,
                                                                                                hours      = self.helpers.pair_average_hold_duration(pair).days * 24 + self.helpers.pair_average_hold_duration(pair).seconds // 3600,
@@ -443,7 +443,7 @@ class Dashboard:
 
                                 html.Tr([html.Td("Strategy"),               html.Td(self.strategy.name, style={'color':'#a3a7b0'})]),
 
-                                html.Tr([html.Td("All orders"),             html.Td("{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.GetOrdersOfBot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)), style={'color':'#a3a7b0'})]),
+                                html.Tr([html.Td("All orders"), html.Td("{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.get_orders_of_bot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)), style={'color': '#a3a7b0'})]),
 
                                 html.Tr([html.Td("Displayed orders"),       html.Td(displayed_trades, style={'color':'#a3a7b0'})]),
                             ]
@@ -460,9 +460,9 @@ class Dashboard:
                         [
                             html.Tr([html.Td("Profit"),                 html.Td(profit, style={'color':'#a3a7b0'})]),
 
-                            html.Tr([html.Td("Fees"),                   html.Td("{fees_in_quote} {quote} ({fees_in_BNB} BNB)".format(quote    = bot['quote'],
-                                                                                                                                     fees_in_quote = dict(self.database.GetBot(pair=pair))['bot_quote_fees'],
-                                                                                                                                     fees_in_BNB   = dict(self.database.GetBot(pair=pair))['bot_BNB_fees']), style={'color':'#a3a7b0'})]),
+                            html.Tr([html.Td("Fees"), html.Td("{fees_in_quote} {quote} ({fees_in_BNB} BNB)".format(quote    = bot['quote'],
+                                                                                                                   fees_in_quote = dict(self.database.get_bot(pair=pair))['bot_quote_fees'],
+                                                                                                                   fees_in_BNB   = dict(self.database.get_bot(pair=pair))['bot_BNB_fees']), style={'color': '#a3a7b0'})]),
                             html.Tr([html.Td("Profit - Fees"),          html.Td(profit_minus_fees, style={'color':'#a3a7b0'})]),
 
                             html.Tr([html.Td("Average hold duration"),  html.Td(average_hold_duration_string, style={'color':'#a3a7b0'})]),
@@ -491,7 +491,7 @@ class Dashboard:
     # CALLBACKS ____________________________________________________________________________________
     # Update the pairs' dropdown menu based on the selected quote
     def update_pair_dropdown(self, input_quote):
-        pairs_list = [dict(bot)['pair'] for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if input_quote in dict(bot)['pair']]
+        pairs_list = [dict(bot)['pair'] for bot in self.database.get_all_bots() if int(dict(bot)['number_of_orders']) >= 1 if input_quote in dict(bot)['pair']]
         sorted_pairs_list = sorted(pairs_list)
         options = [{'label': pair, 'value': pair} for pair in sorted_pairs_list]
         value   = ''                        # No default
@@ -500,7 +500,7 @@ class Dashboard:
     # Update the data to display for the pair
     def plot_pair_data(self, input_pair, input_timeframe, input_duration, input_inds):
         if input_pair:
-            h = self.plot_bot_history(bot                = dict(self.database.GetBot(input_pair)),
+            h = self.plot_bot_history(bot                = dict(self.database.get_bot(input_pair)),
                                       resample_timeframe = input_timeframe,
                                       nb_last_trades     = input_duration,
                                       indicators         = input_inds)

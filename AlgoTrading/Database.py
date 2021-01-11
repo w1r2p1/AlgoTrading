@@ -91,7 +91,7 @@ class BotDatabase:
 
 
 	""" BOTS --------------------------------------------------------------- """
-	def SaveBot(self, bot_params:dict):
+	def save_bot(self, bot_params:dict):
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
@@ -103,7 +103,7 @@ class BotDatabase:
 		conn.commit()
 
 
-	def GetBot(self, pair:str):
+	def get_bot(self, pair:str):
 		""" Gets Bot details from Database. """
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -115,7 +115,7 @@ class BotDatabase:
 		return bot					# We need to return None if there is no bot on the pair, so no dict(bot). 		# dict(bot) = {botname:'bot_LTCBTC', pair:'LTCBTC, ...}
 
 
-	def GetAllBots(self):
+	def get_all_bots(self):
 		""" Gets details from all the bots in the database """
 		try:
 			conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -149,7 +149,6 @@ class BotDatabase:
 			ov = dict(c.fetchone())['base_balance']
 			ov = ov if ov!='' else 0		# Case where the bot is not holding the coin
 			if kwargs['base_balance']!='':
-				print(Decimal(kwargs['base_balance']))
 				value = Decimal(ov) + Decimal(kwargs['base_balance'])
 				value = value if value != 0 else ''
 				values = (str(value), pair)
@@ -203,7 +202,7 @@ class BotDatabase:
 		conn.commit()
 
 
-	def DeleteBots(self, quote:str):
+	def delete_bots(self, quote:str):
 		""" Deletes all the bots in the database on a given quote. """
 
 		if quote:
@@ -228,7 +227,7 @@ class BotDatabase:
 
 
 	""" ORDERS ------------------------------------------------------------- """
-	def SaveOrder(self, quote:str, order_result:dict, hold_duration:str, profit:str, quote_fee:str, BNB_fee:str, profit_minus_fees:str, time_to_fill:str, **kwargs):
+	def save_order(self, quote:str, order_result:dict, hold_duration:str, profit:str, quote_fee:str, BNB_fee:str, profit_minus_fees:str, time_to_fill:str, **kwargs):
 		""" Saves an order to the Database. """
 
 		if order_result:
@@ -263,7 +262,7 @@ class BotDatabase:
 			conn.commit()
 
 
-	def GetOrdersOfBot(self, pair:str):
+	def get_orders_of_bot(self, pair:str):
 		""" Gets all the orders made on a pair """
 
 		conn             = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)

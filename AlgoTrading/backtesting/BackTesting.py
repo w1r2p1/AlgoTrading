@@ -185,7 +185,7 @@ class BackTesting:
         starting_balances 	= self.starting_balances
         alloc_pct 			= self.alloc_pct
         stop_loss_pct 		= self.stop_loss_pct
-        bot = dict(self.database.GetBot(pair=pair))
+        bot = dict(self.database.get_bot(pair=pair))
 
         self.prepare_df()
 

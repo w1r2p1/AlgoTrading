@@ -25,7 +25,7 @@ class HelperMethods:
 
     def open_orders(self, quote:str)->int:
         """ Returns the number of currently open buy positions. """
-        return len([dict(bot)['pair'] for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to exit' if dict(bot)['quote']==quote])
+        return len([dict(bot)['pair'] for bot in self.database.get_all_bots() if dict(bot)['status'] == 'Looking to exit' if dict(bot)['quote'] == quote])
 
     def quote_average_hold_duration(self, quote:str):
         """Computes the average holding duration on a quote."""
@@ -65,14 +65,14 @@ class HelperMethods:
 
     def pair_recent_orders(self, pair:str)->int:
         """ Returns the number of orders we did in the last 24 hours on a pair. """
-        return len([dict(order)['pair'] for order in list(self.database.GetOrdersOfBot(pair))
+        return len([dict(order)['pair'] for order in list(self.database.get_orders_of_bot(pair))
                     if datetime.utcnow()-timedelta(hours=24) < datetime.strptime(dict(order)['transactTime'], "%Y-%m-%d %H:%M:%S")])
 
     def pair_average_hold_duration(self, pair:str):
         """ Computes the average hold duration on a quote."""
 
         hold_durations = []
-        ordersOfBot = list(self.database.GetOrdersOfBot(pair=pair))
+        ordersOfBot = list(self.database.get_orders_of_bot(pair=pair))
 
         if len(ordersOfBot) > 1:
             for order in ordersOfBot:
@@ -96,7 +96,7 @@ class HelperMethods:
             return None
 
     def locked_in_trades(self, quote:str):
-        return sum([float(dict(bot)['quote_lockedintrade']) for bot in self.database.GetAllBots() if dict(bot)['status']=='Looking to exit' if dict(bot)['quote']==quote])
+        return sum([float(dict(bot)['quote_lockedintrade']) for bot in self.database.get_all_bots() if dict(bot)['status'] == 'Looking to exit' if dict(bot)['quote'] == quote])
 
     @staticmethod
     def RoundToValidPrice(bot:dict, price:Decimal)->Decimal:

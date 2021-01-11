@@ -16,7 +16,7 @@ class Histories:
         self.database  = BotDatabase("../assets/database.db")
         self.exchange  = Binance(filename='../assets/credentials.txt')
         self.timeframe = '1m'
-        self.ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in self.database.GetAllBots()]))             # ['ETH', 'BTC']
+        self.ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in self.database.get_all_bots()]))             # ['ETH', 'BTC']
 
 
     def GetAllHistories(self):

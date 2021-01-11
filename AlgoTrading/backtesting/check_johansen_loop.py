@@ -89,7 +89,7 @@ def check_johansen(comb, cointegrating_pairs, timeframe):
 if __name__ == '__main__':
 
     # database  = BotDatabase("database.db")
-    # ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in database.GetAllBots()]))       # ['ETH', 'BTC']
+    # ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in database.get_all_bots()]))       # ['ETH', 'BTC']
     exchange  = Binance(filename='credentials.txt')
     pairs     = exchange.GetNameOfPairs_WithQuoteasset(['BTC'])                                         # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
 

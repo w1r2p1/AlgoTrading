@@ -18,7 +18,7 @@ class TelegramInterface:
         self.helpers  = HelperMethods(database=self.database)
 
         # Get the quotes in the database
-        unsorted_existing_quoteassets = [dict(bot)['quote'] for bot in self.database.GetAllBots()]
+        unsorted_existing_quoteassets = [dict(bot)['quote'] for bot in self.database.get_all_bots()]
         self.existing_quoteassets = list(set(sorted(unsorted_existing_quoteassets)))                       # ['BTC', 'ETH']
 
         # Define a pattern to look for when clicking on a button
@@ -28,7 +28,7 @@ class TelegramInterface:
         self.quotes = quotes + ')$'
 
         # Get all the pairs we have traded on
-        all_traded_pairs = sorted([dict(bot)['pair'] for bot in self. database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1])
+        all_traded_pairs = sorted([dict(bot)['pair'] for bot in self. database.get_all_bots() if int(dict(bot)['number_of_orders']) >= 1])
         # Define a pattern to look for when clicking on a button
         pairs = '^('
         for pair_ in all_traded_pairs:
@@ -86,8 +86,8 @@ class TelegramInterface:
 
     def select_base_menu_keyboard(self, quote:str):
 
-        pairs_ = sorted([dict(bot)['pair'] for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if dict(bot)['quote']==quote])
-        bases_ = sorted([dict(bot)['pair'].replace(quote, '') for bot in self.database.GetAllBots() if int(dict(bot)['number_of_orders'])>=1 if dict(bot)['quote']==quote])
+        pairs_ = sorted([dict(bot)['pair'] for bot in self.database.get_all_bots() if int(dict(bot)['number_of_orders']) >= 1 if dict(bot)['quote'] == quote])
+        bases_ = sorted([dict(bot)['pair'].replace(quote, '') for bot in self.database.get_all_bots() if int(dict(bot)['number_of_orders']) >= 1 if dict(bot)['quote'] == quote])
 
         # Use bases_ for the display, pairs_ for the callback_data
         all_base_buttons = [InlineKeyboardButton(base, callback_data=pair) for base, pair in zip(bases_, pairs_)]
@@ -157,11 +157,11 @@ class TelegramInterface:
                 quote = quote_
 
         # Check if the bot sold at least one time and adapt what's displayed
-        if len(list(self.database.GetOrdersOfBot(pair))) > 1:
-            profit = f"{dict(self.database.GetBot(pair=pair))['bot_profit']} {quote}"
+        if len(list(self.database.get_orders_of_bot(pair))) > 1:
+            profit = f"{dict(self.database.get_bot(pair=pair))['bot_profit']} {quote}"
 
             profit_minus_fees = "{profit_minus_fees} {quoteasset}".format(quoteasset        = quote,
-                                                                          profit_minus_fees = dict(self.database.GetBot(pair=pair))['bot_profit_minus_fees'])
+                                                                          profit_minus_fees = dict(self.database.get_bot(pair=pair))['bot_profit_minus_fees'])
 
             average_hold_duration_string = "{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.pair_average_hold_duration(pair).days,
                                                                                                hours      = self.helpers.pair_average_hold_duration(pair).days * 24 + self.helpers.pair_average_hold_duration(pair).seconds // 3600,
@@ -180,12 +180,12 @@ class TelegramInterface:
              ``` *""" + pair + """ STATS :*"""
         text = text + """``` 
     
-    All orders  = """ + "{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.GetOrdersOfBot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)) + """
+    All orders  = """ + "{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.get_orders_of_bot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)) + """
     Profit      = """ + profit + """
     Fees        = """ + """{fees_in_quote} {quoteasset}
                   ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
-                                                fees_in_quote = dict(self.database.GetBot(pair=pair))['bot_quote_fees'],
-                                                fees_in_BNB   = format(round(Decimal(dict(self.database.GetBot(pair=pair))['bot_BNB_fees']), 3), 'f')) + """
+                                                fees_in_quote = dict(self.database.get_bot(pair=pair))['bot_quote_fees'],
+                                                fees_in_BNB   = format(round(Decimal(dict(self.database.get_bot(pair=pair))['bot_BNB_fees']), 3), 'f')) + """
     Profit-Fees = """ + profit_minus_fees + """
     Hold dur.   = """ + average_hold_duration_string + """
     ```"""

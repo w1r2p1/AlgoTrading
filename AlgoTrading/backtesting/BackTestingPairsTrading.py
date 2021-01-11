@@ -103,8 +103,8 @@ class BackTestingPairsTrading:
 
 	def backtest(self, quote:str, pairs:list, starting_balances:dict, length:int, std, alloc_pct:int, plot:bool=False):
 
-		bot_pair0 = dict(self.database.GetBot(pair=pairs[0]))
-		bot_pair1 = dict(self.database.GetBot(pair=pairs[1]))
+		bot_pair0 = dict(self.database.get_bot(pair=pairs[0]))
+		bot_pair1 = dict(self.database.get_bot(pair=pairs[1]))
 
 		self.prepare_df(quote=quote, pairs=pairs)
 

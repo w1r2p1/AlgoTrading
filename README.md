@@ -1,25 +1,30 @@
 # AlgoTrading
 ------------
 
-This project implements the necessary functionalities to engage in crypto algorithmic trading.
+This project implements the necessary functionalities to engage in 24/7 crypto algorithmic trading on Binance.
 
 
 ## Features
 
 - [x] **Written in Python 3.8+**
 - [x] **Persistence**: Persistence is achieved through sqlite.
+- [x] **Persistence**: Persistence is achieved through sqlite.
 - [x] **Paper-Trading**: Run the bot without playing money.
+- [x] **Agility**: Trade on all possible pairs on multiple quotes at the same time (ETH and BTC for example).
+- [x] **Timeframes**: Trade on timeframes from one minute to daily data.
 - [x] **Backtesting**: Run a simulation of a buy/sell strategy on a specific pair.
 - [x] **Strategy templates**: The project comes with build-in strategies that the user can fine-tune.
-- [x] **Strategy Optimization by GridSearch**: Use a GridSearch to optimize the buy/sell strategy parameters with real exchange data.
+- [x] **Strategy Optimization by GridSearch**: Use a GridSearch to optimize the buy/sell strategy parameters.
 - [x] **Dashboard GUI**: Monitor the performances of the bot through an elegant Dash GUI.
-- [x] **Telegram Interface**: Manage the bot with Telegram. Currently Read-only.
-- [x] **Performance status report**: Provide a performance status of your current trades.
+- [x] **Telegram Interface**: Provide a performance status of your current trades.
+- [x] **Speed**: Multiprocessing is implemented across the algo to speed it up.
 
 
 ## Basic Usage
 
-Store your Binance API key in a 'credentials.txt' in /assets
+in `/assets` : store your Binance API key in 'credentials.txt' , and your telegram credentials in 'telegram_config.cfg'.
+
+Trading can be entirely managed from `Trading.py`. Additionally, run `Dashboard.py` to display a live dashboard (GUI) to get performance metrics, and `Telegram_interface.py` to get a Telegram interface.
 
 ### Structure
 
@@ -29,8 +34,9 @@ The code is organized as follows :
 - `Telegram_interface.py`: run the file and send `/start` to the telegram bot from telegram.
 - `Database.py`: Manages the databases. One database for paper_trading, another for live trading.
 - `Echange.py`: Manages the interface with Binance's REST API.
+- `Helpers.py`: Helper methods.
 - `/assets.py`: stores some usefull files, and the Binance and Telegram credentials.
-- `/backtesting.py`: Multiple scripts to backtest strategies..
+- `/backtesting.py`: Multiple scripts to backtest strategies.
 - `/experimentations.py`: Files in progress to test personal ideas.
 
 

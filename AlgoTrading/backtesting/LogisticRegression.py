@@ -490,7 +490,7 @@ class ModelSelection:
                                      ))
             fig.update_yaxes(title_text  = "<b>" + self.pair.replace(self.quote, '') + "</b> log returns")
             fig.update_layout({"yaxis" : {"zeroline" : True},
-                               "title" : f'{sklearn_model} - {self.side} predictions and truth.\nCustom {round(nb_detec/nb_truth*100,1)}% accuracy.'})
+                               "title" : f'{self.pair} - {self.timeframe} - {sklearn_model} - {self.side} predictions and truth.\nCustom {round(nb_detec/nb_truth*100,1)}% accuracy.'})
 
 
             # Add the train pivots

@@ -145,7 +145,15 @@ class BotDatabase:
 			c.execute('UPDATE bots SET quote_allocation = ? WHERE pair = ?', (kwargs['quote_allocation'], pair))
 
 		if 'base_balance' in kwargs:
-			c.execute('UPDATE bots SET base_balance = ? WHERE pair = ?', (kwargs['base_balance'], pair))
+			c.execute('SELECT * FROM bots WHERE pair = ?', (pair, ))
+			ov = dict(c.fetchone())['base_balance']
+			ov = ov if ov!='' else 0		# Case where the bot is not holding the coin
+			if kwargs['base_balance']!='':
+				print(Decimal(kwargs['base_balance']))
+				value = Decimal(ov) + Decimal(kwargs['base_balance'])
+				value = value if value != 0 else ''
+				values = (str(value), pair)
+				c.execute('UPDATE bots SET base_balance = ? WHERE pair = ?', values)
 
 		if 'quote_lockedintrade' in kwargs:
 			c.execute('UPDATE bots SET quote_lockedintrade = ? WHERE pair = ?', (kwargs['quote_lockedintrade'], pair))
@@ -282,7 +290,7 @@ class BotDatabase:
 		return orders                           	# We need to return None if there is no bot on the pair, so no dict(orders)
 
 
-	def GetOpenBots(self, quote:str):
+	def get_open_bots(self, quote:str):
 		""" Gets all the orders made on a pair """
 
 		conn             = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)

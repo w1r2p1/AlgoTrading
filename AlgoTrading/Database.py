@@ -330,53 +330,95 @@ class BotDatabase:
 		conn.commit()
 
 
-	def update_db_account_balances(self,
-								   quote:str,
-								   real_balance:str,
-								   real_locked:str,
-								   internal_balance:str,
-								   internal_locked:str,
-								   internal_profit:str,
-								   internal_quote_fees:str,
-								   internal_BNB_fees:str,
-								   internal_profit_minus_fees:str,
-								   quoteAssetPrecision:int,
-								   BNB_Precision:int):
+	def update_db_account_balances(self, quote:str, **kwargs):
 		""" Updates the internal & real balances of each quote. """
+
+		# real_balance 				= kwargs.get('real_balance', None)
+		# real_locked 				= kwargs.get('real_locked', None)
+		# internal_balance 			= kwargs.get('internal_balance', None)
+		# internal_locked 			= kwargs.get('internal_locked', None)
+		# internal_profit 			= kwargs.get('internal_profit', None)
+		# internal_quote_fees 		= kwargs.get('internal_quote_fees', None)
+		# internal_BNB_fees 			= kwargs.get('internal_BNB_fees', None)
+		# internal_profit_minus_fees 	= kwargs.get('internal_profit_minus_fees', None)
+		# quoteAssetPrecision 		= kwargs.get('quoteAssetPrecision', None)
+		# BNB_Precision 				= kwargs.get('BNB_Precision', None)
 
 		conn 			 = sqlite3.connect(self.name, detect_types=sqlite3.PARSE_DECLTYPES)
 		conn.row_factory = sqlite3.Row
 		c 				 = conn.cursor()
 
-		# Get the current balance in the db
-		c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
-		accountBalance 	 	  = c.fetchone()
-		int_balance 		  = dict(accountBalance)['internal_balance']
-		int_locked 		  	  = dict(accountBalance)['internal_locked']
-		int_profit   		  = dict(accountBalance)['internal_profit']
-		int_quote_fees 	  	  = dict(accountBalance)['internal_quote_fees']
-		int_BNB_fees 		  = dict(accountBalance)['internal_BNB_fees']
-		int_profit_minus_fees = dict(accountBalance)['internal_profit_minus_fees']
+		# # Get the current balance in the db
+		# c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
+		# accountBalance 	 	  = c.fetchone()
+		# int_balance 		  = dict(accountBalance)['internal_balance']
+		# int_locked 		  	  = dict(accountBalance)['internal_locked']
+		# int_profit   		  = dict(accountBalance)['internal_profit']
+		# int_quote_fees 	  	  = dict(accountBalance)['internal_quote_fees']
+		# int_BNB_fees 		  = dict(accountBalance)['internal_BNB_fees']
+		# int_profit_minus_fees = dict(accountBalance)['internal_profit_minus_fees']
+		#
+		# values = (real_balance,
+		# 		  real_locked,
+		# 		  format(round(Decimal(int_balance) + Decimal(internal_balance), quoteAssetPrecision), 'f'),
+		# 		  format(round(Decimal(int_locked)  + Decimal(internal_locked),  quoteAssetPrecision), 'f'),
+		# 		  format(round(Decimal(int_profit)  + Decimal(internal_profit),  quoteAssetPrecision), 'f'),
+		# 		  format(round(Decimal(int_quote_fees) + Decimal(internal_quote_fees), quoteAssetPrecision), 'f'),
+		# 		  format(round(Decimal(int_BNB_fees)   + Decimal(internal_BNB_fees),   BNB_Precision), 'f'),
+		# 		  format(round(Decimal(int_profit_minus_fees) + Decimal(internal_profit_minus_fees), quoteAssetPrecision), 'f'),
+		# 		  quote)
+		#
+		# c.execute('UPDATE account_balances SET real_balance = ?,'
+		# 		  							  'real_locked = ?,'
+		# 								      'internal_balance = ?,'
+		# 								      'internal_locked = ?,'
+		# 								      'internal_profit = ?,'
+		# 								  	  'internal_quote_fees = ?,'
+		# 								 	  'internal_BNB_fees = ?,'
+		# 								 	  'internal_profit_minus_fees = ?'
+		# 		  'WHERE quote = ?', values)
 
-		values = (real_balance,
-				  real_locked,
-				  format(round(Decimal(int_balance) + Decimal(internal_balance), quoteAssetPrecision), 'f'),
-				  format(round(Decimal(int_locked)  + Decimal(internal_locked),  quoteAssetPrecision), 'f'),
-				  format(round(Decimal(int_profit)  + Decimal(internal_profit),  quoteAssetPrecision), 'f'),
-				  format(round(Decimal(int_quote_fees) + Decimal(internal_quote_fees), quoteAssetPrecision), 'f'),
-				  format(round(Decimal(int_BNB_fees)   + Decimal(internal_BNB_fees),   BNB_Precision), 'f'),
-				  format(round(Decimal(int_profit_minus_fees) + Decimal(internal_profit_minus_fees), quoteAssetPrecision), 'f'),
-				  quote)
+		if 'real_balance' in kwargs:
+			c.execute('UPDATE account_balances SET real_balance = ? WHERE quote = ?', (kwargs['real_balance'], quote))
 
-		c.execute('UPDATE account_balances SET real_balance = ?,'
-				  							  'real_locked = ?,'
-										      'internal_balance = ?,'
-										      'internal_locked = ?,'
-										      'internal_profit = ?,'
-										  	  'internal_quote_fees = ?,'
-										 	  'internal_BNB_fees = ?,'
-										 	  'internal_profit_minus_fees = ?'
-				  'WHERE quote = ?', values)
+		if 'real_locked' in kwargs:
+			c.execute('UPDATE account_balances SET real_locked = ?  WHERE quote = ?', (kwargs['real_locked'], quote))
+
+		if 'internal_balance' in kwargs:
+			c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
+			ov = dict(c.fetchone())['internal_balance']
+			values = (str(Decimal(ov) + Decimal(kwargs['internal_balance'])), quote)
+			c.execute('UPDATE account_balances SET internal_balance = ? WHERE quote = ?', values)
+
+		if 'internal_locked' in kwargs:
+			c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
+			ov = dict(c.fetchone())['internal_locked']
+			values = (str(Decimal(ov) + Decimal(kwargs['internal_locked'])), quote)
+			c.execute('UPDATE account_balances SET internal_locked = ? WHERE quote = ?', values)
+
+		if 'internal_profit' in kwargs:
+			c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
+			ov = dict(c.fetchone())['internal_profit']
+			values = (str(Decimal(ov) + Decimal(kwargs['internal_profit'])), quote)
+			c.execute('UPDATE account_balances SET internal_profit = ? WHERE quote = ?', values)
+
+		if 'internal_quote_fees' in kwargs:
+			c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
+			ov = dict(c.fetchone())['internal_quote_fees']
+			values = (str(Decimal(ov) + Decimal(kwargs['internal_quote_fees'])), quote)
+			c.execute('UPDATE account_balances SET internal_quote_fees = ? WHERE quote = ?', values)
+
+		if 'internal_BNB_fees' in kwargs:
+			c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
+			ov = dict(c.fetchone())['internal_BNB_fees']
+			values = (str(Decimal(ov) + Decimal(kwargs['internal_BNB_fees'])), quote)
+			c.execute('UPDATE account_balances SET internal_BNB_fees = ? WHERE quote = ?', values)
+
+		if 'internal_profit_minus_fees' in kwargs:
+			c.execute('SELECT * FROM account_balances WHERE quote = ?', (quote, ))
+			ov = dict(c.fetchone())['internal_profit_minus_fees']
+			values = (str(Decimal(ov) + Decimal(kwargs['internal_profit_minus_fees'])), quote)
+			c.execute('UPDATE account_balances SET internal_profit_minus_fees = ? WHERE quote = ?', values)
 
 		conn.commit()
 

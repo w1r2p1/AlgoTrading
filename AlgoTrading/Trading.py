@@ -96,13 +96,14 @@ class Trading:
         self.bot_chatID = '456212622'
 
 
-    def main_loop(self):
+    def start(self):
 
         self.initialize_databases()
 
         colorama.init()
-        print(colorama.Fore.GREEN + "\n_______________________________________________________________________________________________")
-        print(colorama.Fore.GREEN + f"{'PAPER' if self.paper_trading else 'LIVE'} TRADING IS RUNNING.\nTimeframe : {self.timeframe}.\n")
+        color = colorama.Fore.BLUE if self.paper_trading else colorama.Fore.GREEN
+        print(color + "\n_______________________________________________________________________________________________")
+        print(color + f"{'PAPER' if self.paper_trading else 'LIVE'} TRADING IS RUNNING.\nTimeframe : {self.timeframe}.\n")
 
         while True:
 
@@ -144,10 +145,10 @@ class Trading:
                 # Summary of the search
                 print(f"\n\t({self.nb_buys_this_candle} {'buy' if self.nb_buys_this_candle==1 else 'buys'}, {self.nb_sells_this_candle} {'sell' if self.nb_sells_this_candle==1 else 'sells'}.) \n")
 
-                # For real trading only, check if the values stored in the db are identical to those on Binance.
-                if not self.paper_trading:
-                    self.check_database_correctness()
-                    # self.update_bots_db_to_binance_values()
+                # # For real trading only, check if the values stored in the db are identical to those on Binance.
+                # if not self.paper_trading:
+                #     self.check_database_correctness()
+                #     # self.update_bots_db_to_binance_values()
 
                 # Manually stop the while loop
                 # break
@@ -175,10 +176,11 @@ class Trading:
 
         if signal == 'buy':
             try:
+                order_type = "MARKET"
                 # Mandatory parameters to send to the endpoint:
                 buy_order_parameters = dict(symbol = pair,
                                             side   = "BUY",
-                                            type   = "MARKET")
+                                            type   = order_type)
 
                 buy_price, quantity = Decimal('0'), Decimal('0')
                 market_price  = Decimal(self.exchange.GetLastestPriceOfPair(pair=pair))
@@ -233,8 +235,8 @@ class Trading:
                                                                                                                                                                                          pair       = pair,
                                                                                                                                                                                          quantity   = buy_order_result['executedQty'],
                                                                                                                                                                                          base       = pair.replace(quote, ''),
-                                                                                                                                                                                         price      = buy_price,
-                                                                                                                                                                                         quote      = quote,
+                                                                                                                                                                                         price      = buy_order_result['price'] if order_type!='MARKET' else 'market price',
+                                                                                                                                                                                         quote      = quote if order_type!='MARKET' else '',
                                                                                                                                                                                          quoteQty   = buy_order_result['cummulativeQuoteQty'])
 
                     print(text)
@@ -399,8 +401,8 @@ class Trading:
                                                                                                                                                                                                                                  pair       = pair,
                                                                                                                                                                                                                                  quantity   = sell_order_result['executedQty'],
                                                                                                                                                                                                                                  base       = pair.replace(quote, ''),
-                                                                                                                                                                                                                                 price      = sell_price,
-                                                                                                                                                                                                                                 quote = quote,
+                                                                                                                                                                                                                                 price      = sell_order_result['price'],
+                                                                                                                                                                                                                                 quote      = quote,
                                                                                                                                                                                                                                  quoteQty   = sell_order_result['cummulativeQuoteQty'],
                                                                                                                                                                                                                                  profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'))
                     print(text)
@@ -434,7 +436,7 @@ class Trading:
                         self.database.update_bot(pair=pair, profitable_sells=+1)
                     else:
                         self.database.update_bot(pair=pair, unprofitable_sells=+1)
-
+                    print(self.exchange.GetAccountBalance(asset=quote).get('free'))
                     # Update the internal balances count
                     self.database.update_db_account_balances(quote                      = quote,
                                                              real_balance               = self.exchange.GetAccountBalance(asset=quote).get('free'),
@@ -601,9 +603,9 @@ class Trading:
 
         sp.stop()
         sp.hide()
-
-        print(colorama.Fore.GREEN + "_______________________________________")
-        print(colorama.Fore.GREEN + f'Candle : {next_candle.strftime("%Y-%m-%d %H:%M") if not wait_till_after_next else after_next_candle.strftime("%Y-%m-%d %H:%M")} (local time).')
+        color = colorama.Fore.BLUE if self. paper_trading else colorama.Fore.GREEN
+        print(color + "_______________________________________")
+        print(color + f'Candle : {next_candle.strftime("%Y-%m-%d %H:%M") if not wait_till_after_next else after_next_candle.strftime("%Y-%m-%d %H:%M")} (local time).')
         self.set_pairs_to_trade_on()          # Takes ~50secs to run
 
         sp.start()
@@ -727,11 +729,13 @@ class Trading:
                                                        started_with     = self.exchange.GetAccountBalance(quote).get('free') if not self.paper_trading else 1, # if paper trading, start with a balance of 1 for each quote
                                                        real_balance     = self.exchange.GetAccountBalance(quote).get('free'),
                                                        internal_balance = self.exchange.GetAccountBalance(quote).get('free') if not self.paper_trading else 1)
+            # Just to be sure
+            self.database.update_db_account_balances(quote=quote, real_balance=self.exchange.GetAccountBalance(quote).get('free'))
 
-        # For real trading only, check if the values stored in the db are identical to those on Binance.
-        if not self.paper_trading:
-            self.check_database_correctness()
-            # self.update_bots_db_to_binance_values()
+        # # For real trading only, check if the values stored in the db are identical to those on Binance.
+        # if not self.paper_trading:
+        #     self.check_database_correctness()
+        #     # self.update_bots_db_to_binance_values()
 
         self.create_bots()
 
@@ -744,6 +748,35 @@ class Trading:
                 value = round(Decimal(bot['base_balance']) * Decimal(self.exchange.GetLastestPriceOfPair(pair=bot['pair'])), bot['baseAssetPrecision'])
                 value = format(value, 'f')
                 self.database.update_bot(pair=bot['pair'], base_value_in_quote=value)
+
+
+    def check_database_correctness(self):
+        """ Check if the values stored in the db are identical to those on Binance. If not, exit the script."""
+
+        print('Checking "account_balances" database correctness.')
+        # General account information : check account_balances.db
+        # https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#account-information-user_data
+        for quote in self.existing_quoteassets:
+            # Check the 'free' balances
+            binance_real_quote_balance = Decimal(self.exchange.GetAccountBalance(quote).get('free'))                                    # The reference
+            db_real_quote_balance      = Decimal(self.database.get_db_account_balance(quote=quote, real_balance=True))
+            db_internal_quote_balance  = Decimal(self.database.get_db_account_balance(quote=quote, internal_balance=True))
+            print('In account_balances.db : real_balance     != Binance balance' if db_real_quote_balance     != binance_real_quote_balance else '')
+            print('In account_balances.db : internal_balance != Binance balance' if db_internal_quote_balance != binance_real_quote_balance else '')
+            print('In account_balances.db : internal_balance != real_balance'    if db_internal_quote_balance != db_real_quote_balance      else '')
+
+            # Check the 'locked' balances
+            binance_real_locked = Decimal(self.exchange.GetAccountBalance(quote).get('locked'))                                         # The reference
+            db_real_locked      = Decimal(self.database.get_db_account_balance(quote=quote, real_locked=True))
+            db_internal_locked  = Decimal(self.database.get_db_account_balance(quote=quote, internal_locked=True))
+            print('In account_balances.db : db_real_locked     != Binance locked' if db_real_locked     != binance_real_locked else '')
+            print('In account_balances.db : db_internal_locked != Binance locked' if db_internal_locked != binance_real_locked else '')
+            print('In account_balances.db : db_internal_locked != db_real_locked' if db_internal_locked != db_real_locked      else '')
+        # sys.exit('Incorrect balances in account_balances.db. Exiting the script.')
+
+
+        # Trades list
+        # https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#account-trade-list-user_data
 
 
     def check_open_positions(self)->dict:
@@ -802,34 +835,6 @@ class Trading:
             print(f'No position on {pair} to liquidate.')
 
 
-    def check_database_correctness(self):
-        """ Check if the values stored in the db are identical to those on Binance. If not, exit the script."""
-
-        print('Checking database correctness.')
-        # General account information : check account_balances.db
-        # https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#account-information-user_data
-        for quote in self.existing_quoteassets:
-            # Check the 'free' balances
-            binance_real_quote_balance = Decimal(self.exchange.GetAccountBalance(quote).get('free'))                                    # The reference
-            db_real_quote_balance      = Decimal(self.database.get_db_account_balance(quote=quote, real_balance=True))
-            db_internal_quote_balance  = Decimal(self.database.get_db_account_balance(quote=quote, internal_balance=True))
-            print('In account_balances.db : real_balance     != Binance balance' if db_real_quote_balance     != binance_real_quote_balance else '')
-            print('In account_balances.db : internal_balance != Binance balance' if db_internal_quote_balance != binance_real_quote_balance else '')
-            print('In account_balances.db : internal_balance != real_balance'    if db_internal_quote_balance != db_real_quote_balance      else '')
-
-            # Check the 'locked' balances
-            binance_real_locked = Decimal(self.exchange.GetAccountBalance(quote).get('locked'))                                         # The reference
-            db_real_locked      = Decimal(self.database.get_db_account_balance(quote=quote, real_locked=True))
-            db_internal_locked  = Decimal(self.database.get_db_account_balance(quote=quote, internal_locked=True))
-            print('In account_balances.db : db_real_locked     != Binance locked' if db_real_locked     != binance_real_locked else '')
-            print('In account_balances.db : db_internal_locked != Binance locked' if db_internal_locked != binance_real_locked else '')
-            print('In account_balances.db : db_internal_locked != db_real_locked' if db_internal_locked != db_real_locked      else '')
-        # sys.exit('Incorrect balances in account_balances.db. Exiting the script.')
-
-
-        # Trades list
-        # https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#account-trade-list-user_data
-
 
 
 if __name__ == "__main__":
@@ -837,12 +842,12 @@ if __name__ == "__main__":
     trading = Trading(paper_trading      = True,
                       timeframe          = '1m',
                       quotes_to_trade_on = ['ETH'],
-                      bots_per_quote     = 4,
+                      bots_per_quote     = 1,
                       send_to_telegram   = False,
                       )
 
     # Start trading
-    trading.main_loop()
+    trading.start()
 
     # Liquidate a position
     # trading.liquidate_position(pair='ADABTC')

@@ -1,7 +1,7 @@
 # AlgoTrading
 ------------
 
-This project implements the necessary functionalities to engage in 24/7 crypto algorithmic trading on Binance.
+This personal project implements the necessary functionalities to engage in 24/7 crypto algorithmic trading on Binance.
 
 
 ## Features
@@ -18,7 +18,7 @@ This project implements the necessary functionalities to engage in 24/7 crypto a
 - [x] **Telegram Interface**: Provide a performance status of your current trades.
 - [x] **Speed**: Multiprocessing is implemented across the algo to speed it up.
 
-**New** : run `/experimentations/live_orderbook.py` to display the orderbook in real time, along with the evolution of imbalance value and the price.
+**New** : run `/experimentations/live_orderbook.py` to display the orderbook in real time via Binance's websocket, along with the evolution of imbalance value and the price.
 
 ## Basic Usage
 
@@ -41,7 +41,7 @@ The code is organized as follows :
 - `Trading.py`: Manages the 24/7 trading process.
 - `Dashboard.py`: GUI to have metrics on the algo's behavior.
 - `Telegram_interface.py`: run the file and send `/start` to the telegram bot from telegram.
-- `Database.py`: Manages the databases. One database for paper_trading, another for live trading.
+- `Database.py`: Manages the databases. One database for paper trading, another for live trading.
 - `Echange.py`: Manages the interface with Binance's REST API.
 - `Helpers.py`: Helper methods.
 - `/assets`: stores the databases, some usefull files, and the Binance and Telegram credentials.

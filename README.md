@@ -23,7 +23,7 @@ This personal project implements the necessary functionalities to engage in 24/7
 
 ## Basic Usage
 
-Connexion to Binance :
+Connection to Binance :
 - [Create an API key](https://www.binance.com/fr/support/faq/360002502072) in your Binance user profile;
 - In `/assets`: store your Binance API key in `credentials.txt`
 
@@ -45,7 +45,7 @@ The code is organized as follows :
 - `Database.py`: Manages the databases. One database for paper trading, another for live trading.
 - `Echange.py`: Manages the interface with Binance's REST API.
 - `Helpers.py`: Helper methods.
-- `/assets`: stores the databases, some usefull files, and the Binance and Telegram credentials.
+- `/assets`: stores the databases, some useful files, and the Binance and Telegram credentials.
 - `/backtesting`: Multiple scripts to backtest strategies.
 - `/experimentations`: Files in progress to test personal ideas.
 

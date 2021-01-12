@@ -122,30 +122,30 @@ class TelegramInterface:
                 hold_duration[quote] = self.helpers.quote_average_hold_duration(quote)
 
                 text = text + """``` _______________________________ 
-                 ``` *""" + quote + """ STATS :*"""
+```*""" + quote + """ STATS :*"""
                 text = text + """``` 
-        All orders   = """ + "{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quote), recent_orders=self.helpers.recent_orders(quote)) + """
-        Open orders  = """ + str(self.helpers.open_orders(quote))  + """
-        Binance bal. = """ + str(self.exchange.GetAccountBalance(quote).get('free'))  + """ """ + quote + """
-        Intern bal.  = """ + str(self.database.get_db_account_balance(quote, internal_balance=True))  + """ """ + quote + """
-        Profit       = """ + """{profit_in_quote} {quoteasset}
-                       ({profit_in_percentage}%)""".format(quoteasset           = quote,
-                                                           profit_in_quote      = self.database.get_db_account_balance(quote, internal_profit=True),
-                                                           profit_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit=True))/Decimal(self.database.get_db_account_balance(quote, started_with=True))*100, 2), 'f')) + """
-        Fees         = """ + """{fees_in_quote} {quoteasset}
-                       ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
-                                                     fees_in_quote = self.database.get_db_account_balance(quote, internal_quote_fees=True),
-                                                     fees_in_BNB   = format(round(Decimal(self.database.get_db_account_balance(quote, internal_BNB_fees=True)), 3), 'f')) + """ 
-        Profit-Fees  = """ + """{profit_minus_fees_in_quote} {quoteasset}
-                       ({profit_minus_fees_in_quote_in_percentage}%)""".format(quoteasset                 = quote,
-                                                                               profit_minus_fees_in_quote = self.database.get_db_account_balance(quote, internal_profit_minus_fees=True),
-                                                                               profit_minus_fees_in_quote_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit_minus_fees=True))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))*100, 2), 'f')) + """
-        Hold dur.    = """ + """{days}d, {hours}h, {minutes}m, {seconds}s""".format(days       = hold_duration[quote].days,
-                                                                                    hours      = hold_duration[quote].days * 24 + hold_duration[quote].seconds // 3600,
-                                                                                    minutes    = (hold_duration[quote].seconds % 3600) // 60,
-                                                                                    seconds    = hold_duration[quote].seconds % 60) + """
-        
-        ```"""
+All orders   = """ + "{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quote), recent_orders=self.helpers.recent_orders(quote)) + """
+Open orders  = """ + str(self.helpers.open_orders(quote))  + """
+Binance bal. = """ + str(self.exchange.GetAccountBalance(quote).get('free'))  + """ """ + quote + """
+Intern bal.  = """ + str(self.database.get_db_account_balance(quote, internal_balance=True))  + """ """ + quote + """
+Profit       = """ + """{profit_in_quote} {quoteasset}
+               ({profit_in_percentage}%)""".format(quoteasset           = quote,
+                                                   profit_in_quote      = self.database.get_db_account_balance(quote, internal_profit=True),
+                                                   profit_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit=True))/Decimal(self.database.get_db_account_balance(quote, started_with=True))*100, 2), 'f')) + """
+Fees         = """ + """{fees_in_quote} {quoteasset}
+               ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
+                                             fees_in_quote = self.database.get_db_account_balance(quote, internal_quote_fees=True),
+                                             fees_in_BNB   = format(round(Decimal(self.database.get_db_account_balance(quote, internal_BNB_fees=True)), 3), 'f')) + """ 
+Profit-Fees  = """ + """{profit_minus_fees_in_quote} {quoteasset}
+               ({profit_minus_fees_in_quote_in_percentage}%)""".format(quoteasset                 = quote,
+                                                                       profit_minus_fees_in_quote = self.database.get_db_account_balance(quote, internal_profit_minus_fees=True),
+                                                                       profit_minus_fees_in_quote_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit_minus_fees=True))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))*100, 2), 'f')) + """
+Hold dur.    = """ + """{days}d, {hours}h, {minutes}m, {seconds}s""".format(days       = hold_duration[quote].days,
+                                                                            hours      = hold_duration[quote].days * 24 + hold_duration[quote].seconds // 3600,
+                                                                            minutes    = (hold_duration[quote].seconds % 3600) // 60,
+                                                                            seconds    = hold_duration[quote].seconds % 60) + """
+    
+    ```"""
 
         query = update.callback_query
         query.answer()
@@ -184,17 +184,17 @@ class TelegramInterface:
         text = """"""
         text = text + """```  """ + str(today.day) + """ """ + today.strftime('%h') + """ """ + today.strftime('%Y')+ """ """ + today.strftime("%H:%M:%S") + """   (UTC)```"""
         text = text + """``` _______________________________ 
-             ``` *""" + pair + """ STATS :*"""
+        ```*""" + pair + """ STATS :*"""
         text = text + """``` 
-    All orders  = """ + "{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.get_orders_of_bot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)) + """
-    Profit      = """ + profit + """
-    Fees        = """ + """{fees_in_quote} {quoteasset}
-                  ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
-                                                fees_in_quote = dict(self.database.get_bot(pair=pair))['bot_quote_fees'],
-                                                fees_in_BNB   = format(round(Decimal(dict(self.database.get_bot(pair=pair))['bot_BNB_fees']), 3), 'f')) + """
-    Profit-Fees = """ + profit_minus_fees + """
-    Hold dur.   = """ + average_hold_duration_string + """
-    ```"""
+All orders  = """ + "{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.get_orders_of_bot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)) + """
+Profit      = """ + profit + """
+Fees        = """ + """{fees_in_quote} {quoteasset}
+              ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
+                                            fees_in_quote = dict(self.database.get_bot(pair=pair))['bot_quote_fees'],
+                                            fees_in_BNB   = format(round(Decimal(dict(self.database.get_bot(pair=pair))['bot_BNB_fees']), 3), 'f')) + """
+Profit-Fees = """ + profit_minus_fees + """
+Hold dur.   = """ + average_hold_duration_string + """
+```"""
 
         query.answer()
         query.edit_message_text(text         = text,

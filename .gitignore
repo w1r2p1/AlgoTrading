@@ -1,5 +1,6 @@
 AlgoTrading/__pycache__/
 AlgoTrading/historical_data/
+AlgoTrading/backtesting/__pycache__/
 AlgoTrading/.idea/
 AlgoTrading/assets/credentials.txt
 AlgoTrading/assets/telegram_config.cfg

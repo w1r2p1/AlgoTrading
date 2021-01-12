@@ -79,7 +79,8 @@ class TelegramInterface:
         # Add a button for each quote in the database.
         quote_buttons = []
         for quote in self.existing_quoteassets:
-            quote_buttons.append(InlineKeyboardButton(quote, callback_data=quote))
+            if list(self.database.get_quote_orders(quote=quote)):
+                quote_buttons.append(InlineKeyboardButton(quote, callback_data=quote))
 
         keyboard = [quote_buttons, [InlineKeyboardButton('Main menu', callback_data='main')]]
         return InlineKeyboardMarkup(keyboard)
@@ -87,7 +88,8 @@ class TelegramInterface:
     def select_base_menu_keyboard(self, quote:str):
 
         pairs_ = sorted([dict(bot)['pair'] for bot in self.database.get_all_bots() if int(dict(bot)['number_of_orders']) >= 1 if dict(bot)['quote'] == quote])
-        bases_ = sorted([dict(bot)['pair'].replace(quote, '') for bot in self.database.get_all_bots() if int(dict(bot)['number_of_orders']) >= 1 if dict(bot)['quote'] == quote])
+        # bases_ = sorted([dict(bot)['pair'].replace(quote, '') for bot in self.database.get_all_bots() if int(dict(bot)['number_of_orders']) >= 1 if dict(bot)['quote'] == quote])
+        bases_ = sorted([pair.replace(quote, '') for pair in pairs_])
 
         # Use bases_ for the display, pairs_ for the callback_data
         all_base_buttons = [InlineKeyboardButton(base, callback_data=pair) for base, pair in zip(bases_, pairs_)]
@@ -109,36 +111,39 @@ class TelegramInterface:
 
     def QuotesStats(self, update, context):
 
+        hold_duration = {}
         today = datetime.utcnow()
         text = """"""
         text = text + """```  """ + str(today.day) + """ """ + today.strftime('%h') + """ """ + today.strftime('%Y')+ """ """ + today.strftime("%H:%M:%S") + """   (UTC)```"""
         for quote in self.existing_quoteassets:
-            text = text + """``` _______________________________ 
-             ``` *""" + quote + """ STATS :*"""
-            text = text + """``` 
-    
-    All orders   = """ + "{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quote), recent_orders=self.helpers.recent_orders(quote)) + """
-    Open orders  = """ + str(self.helpers.open_orders(quote))  + """
-    Binance bal. = """ + str(self.exchange.GetAccountBalance(quote).get('free'))  + """ """ + quote + """
-    Intern bal.  = """ + str(self.database.get_db_account_balance(quote, internal_balance=True))  + """ """ + quote + """
-    Profit       = """ + """{profit_in_quote} {quoteasset}
-                   ({profit_in_percentage}%)""".format(quoteasset           = quote,
-                                                       profit_in_quote      = self.database.get_db_account_balance(quote, internal_profit=True),
-                                                       profit_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit=True))/Decimal(self.database.get_db_account_balance(quote, started_with=True))*100, 2), 'f')) + """
-    Fees         = """ + """{fees_in_quote} {quoteasset}
-                   ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
-                                                 fees_in_quote = self.database.get_db_account_balance(quote, internal_quote_fees=True),
-                                                 fees_in_BNB   = format(round(Decimal(self.database.get_db_account_balance(quote, internal_BNB_fees=True)), 3), 'f')) + """ 
-    Profit-Fees  = """ + """{profit_minus_fees_in_quote} {quoteasset}
-                   ({profit_minus_fees_in_quote_in_percentage}%)""".format(quoteasset                 = quote,
-                                                                           profit_minus_fees_in_quote = self.database.get_db_account_balance(quote, internal_profit_minus_fees=True),
-                                                                           profit_minus_fees_in_quote_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit_minus_fees=True))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))*100, 2), 'f')) + """
-    Hold dur.    = """ + """{days}d, {hours}h, {minutes}m, {seconds}s""".format(days       = self.helpers.quote_average_hold_duration(quote).days,
-                                                                                hours      = self.helpers.quote_average_hold_duration(quote).days * 24 + self.helpers.quote_average_hold_duration(quote).seconds // 3600,
-                                                                                minutes    = (self.helpers.quote_average_hold_duration(quote).seconds % 3600) // 60,
-                                                                                seconds    = self.helpers.quote_average_hold_duration(quote).seconds % 60) + """
-    
-    ```"""
+            if list(self.database.get_quote_orders(quote=quote)):
+                hold_duration[quote] = self.helpers.quote_average_hold_duration(quote)
+
+                text = text + """``` _______________________________ 
+                 ``` *""" + quote + """ STATS :*"""
+                text = text + """``` 
+        All orders   = """ + "{total_orders} (+{recent_orders} in 24h)".format(total_orders=self.helpers.total_orders(quote), recent_orders=self.helpers.recent_orders(quote)) + """
+        Open orders  = """ + str(self.helpers.open_orders(quote))  + """
+        Binance bal. = """ + str(self.exchange.GetAccountBalance(quote).get('free'))  + """ """ + quote + """
+        Intern bal.  = """ + str(self.database.get_db_account_balance(quote, internal_balance=True))  + """ """ + quote + """
+        Profit       = """ + """{profit_in_quote} {quoteasset}
+                       ({profit_in_percentage}%)""".format(quoteasset           = quote,
+                                                           profit_in_quote      = self.database.get_db_account_balance(quote, internal_profit=True),
+                                                           profit_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit=True))/Decimal(self.database.get_db_account_balance(quote, started_with=True))*100, 2), 'f')) + """
+        Fees         = """ + """{fees_in_quote} {quoteasset}
+                       ({fees_in_BNB} BNB)""".format(quoteasset    = quote,
+                                                     fees_in_quote = self.database.get_db_account_balance(quote, internal_quote_fees=True),
+                                                     fees_in_BNB   = format(round(Decimal(self.database.get_db_account_balance(quote, internal_BNB_fees=True)), 3), 'f')) + """ 
+        Profit-Fees  = """ + """{profit_minus_fees_in_quote} {quoteasset}
+                       ({profit_minus_fees_in_quote_in_percentage}%)""".format(quoteasset                 = quote,
+                                                                               profit_minus_fees_in_quote = self.database.get_db_account_balance(quote, internal_profit_minus_fees=True),
+                                                                               profit_minus_fees_in_quote_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit_minus_fees=True))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))*100, 2), 'f')) + """
+        Hold dur.    = """ + """{days}d, {hours}h, {minutes}m, {seconds}s""".format(days       = hold_duration[quote].days,
+                                                                                    hours      = hold_duration[quote].days * 24 + hold_duration[quote].seconds // 3600,
+                                                                                    minutes    = (hold_duration[quote].seconds % 3600) // 60,
+                                                                                    seconds    = hold_duration[quote].seconds % 60) + """
+        
+        ```"""
 
         query = update.callback_query
         query.answer()
@@ -179,7 +184,6 @@ class TelegramInterface:
         text = text + """``` _______________________________ 
              ``` *""" + pair + """ STATS :*"""
         text = text + """``` 
-    
     All orders  = """ + "{pair_total_orders} (+{recent_orders} in 24h)".format(pair_total_orders=len(list(self.database.get_orders_of_bot(pair))), recent_orders=self.helpers.pair_recent_orders(pair)) + """
     Profit      = """ + profit + """
     Fees        = """ + """{fees_in_quote} {quoteasset}

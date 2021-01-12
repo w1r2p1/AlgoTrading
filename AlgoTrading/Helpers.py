@@ -1,11 +1,10 @@
 from decimal import Decimal
-import datetime
+# import datetime
 from   datetime import datetime, timedelta
 import socket
 import struct
 import ctypes, sys
 import time
-import datetime
 import win32api
 from   Database import BotDatabase
 
@@ -31,11 +30,14 @@ class HelperMethods:
         """Computes the average holding duration on a quote."""
 
         hold_durations = []
-        for order in list(self.database.get_quote_orders(quote=quote)):
-            if dict(order)['side'] == 'SELL':
-                lst = dict(order)['hold_duration']
-                if '-' not in lst:
-                    lst = lst.split(":")
+        quote_orders = list(self.database.get_quote_orders(quote=quote))
+
+        if quote_orders:
+            for order in quote_orders:
+                order = dict(order)
+                if order['side'] == 'SELL':
+                    lst_ = order['hold_duration']
+                    lst  = lst_.split(":")
 
                     # Look for milliseconds
                     milliseconds = 0
@@ -45,23 +47,17 @@ class HelperMethods:
 
                     # Create a list of timedeltas
                     if len(lst[0])<=2:
-                        hold_durations.append(timedelta(hours=int(lst[0]), minutes=int(lst[1]), seconds=int(lst[2]), milliseconds=milliseconds))
+                        duration = timedelta(hours=int(lst[0]), minutes=int(lst[1]), seconds=int(lst[2]), milliseconds=milliseconds)
+                        hold_durations.append(duration)
                     else:
                         temp  = lst[0].split(" ")
                         days  = temp[0]
                         hours = temp[-1]
                         hold_durations.append(timedelta(days=int(days), hours=int(hours), minutes=int(lst[1]), seconds=int(lst[2]), milliseconds=milliseconds))
-
-        # for item in hold_durations:
-        #     print(item)
-
-        td = sum(hold_durations, timedelta()) / len(hold_durations)		# Average of the timedeltas
-        # print("Average holding duration on {quote} : {days}d, {hours}h, {minutes}m, {seconds}s.".format(quote = quote,
-        #                                                                                                      days       = td.days,
-        #                                                                                                      hours      = td.days * 24 + td.seconds // 3600,
-        #                                                                                                      minutes    = (td.seconds % 3600) // 60,
-        #                                                                                                      seconds    = td.seconds % 60))
-        return td
+            td = sum(hold_durations, timedelta()) / len(hold_durations)		# Average of the timedeltas
+            return td
+        else:
+            return None
 
     def pair_recent_orders(self, pair:str)->int:
         """ Returns the number of orders we did in the last 24 hours on a pair. """
@@ -189,13 +185,13 @@ class HelperMethods:
         # Iterates over every server in the list until it finds time from any one.
         for server in server_list:
             epoch_time = self.gettime_ntp(server)
-            print(datetime.datetime.fromtimestamp(epoch_time))
+            print(datetime.fromtimestamp(epoch_time))
             if epoch_time is not None:
                 # SetSystemTime takes time as argument in UTC time. UTC time is obtained using utcfromtimestamp()
-                utcTime = datetime.datetime.utcfromtimestamp(epoch_time)
+                utcTime = datetime.utcfromtimestamp(epoch_time)
                 win32api.SetSystemTime(utcTime.year, utcTime.month, utcTime.weekday(), utcTime.day, utcTime.hour, utcTime.minute, utcTime.second, 0)
                 # Local time is obtained using fromtimestamp()
-                localTime = datetime.datetime.fromtimestamp(epoch_time)
+                localTime = datetime.fromtimestamp(epoch_time)
                 print(f'Time updated to: {localTime.strftime("%Y-%m-%d %H:%M")} from {server}')
                 break
             else:

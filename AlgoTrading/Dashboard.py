@@ -32,6 +32,10 @@ class Dashboard:
                              external_stylesheets=[dbc.themes.BOOTSTRAP],
                              meta_tags=[{"name": "viewport", "content": "width=device-width"}])
 
+        hold_duration = {}
+        for quote in self.existing_quoteassets:
+            hold_duration[quote] = self.helpers.quote_average_hold_duration(quote)
+
         self.app.layout = html.Div(
             [
                 html.Div(
@@ -64,17 +68,17 @@ class Dashboard:
                                                                                                                                                                                               profit_in_quote = self.database.get_db_account_balance(quote, real_profit=True),
                                                                                                                                                                                               profit_in_percentage = format(round(Decimal(self.database.get_db_account_balance(quote, internal_profit=True))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))*100, 2), 'f')),
                                                                                                                                  style={'color':'#a3a7b0'})]),
-                                                                            html.Tr([html.Td("Fees"),                    html.Td("{fees_in_quote} {quote} ({fees_in_BNB} BNB)".format(quote    = quote,
+                                                                            html.Tr([html.Td("Fees"),                    html.Td("{fees_in_quote} {quote} ({fees_in_BNB} BNB)".format(quote = quote,
                                                                                                                                                                                       fees_in_quote = self.database.get_db_account_balance(quote, internal_quote_fees=True),
                                                                                                                                                                                       fees_in_BNB   = self.database.get_db_account_balance(quote, internal_BNB_fees=True)),
                                                                                                                                  style={'color':'#a3a7b0'})]),
                                                                             html.Tr([html.Td("Profit - Fees"),           html.Td("{profit_minus_fees_in_quote} {quote} ({profit_minus_fees_in_quote_in_percentage}%)".format(quote = quote,
                                                                                                                                                                                                                              profit_minus_fees_in_quote = self.database.get_db_account_balance(quote, internal_profit_minus_fees=True),
                                                                                                                                                                                                                              profit_minus_fees_in_quote_in_percentage = format(round(((Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))+Decimal(self.database.get_db_account_balance(quote=quote, internal_profit_minus_fees=True)))/Decimal(self.database.get_db_account_balance(quote=quote, started_with=True))-1)*100, 2), 'f')), style={'color':'#a3a7b0'})]),
-                                                                            html.Tr([html.Td("Average hold duration"),   html.Td("{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = self.helpers.quote_average_hold_duration(quote).days,
-                                                                                                                                                                                     hours      = self.helpers.quote_average_hold_duration(quote).days * 24 + self.helpers.quote_average_hold_duration(quote).seconds // 3600,
-                                                                                                                                                                                     minutes    = (self.helpers.quote_average_hold_duration(quote).seconds % 3600) // 60,
-                                                                                                                                                                                     seconds    = self.helpers.quote_average_hold_duration(quote).seconds % 60), style={'color':'#a3a7b0'})]),
+                                                                            html.Tr([html.Td("Average hold duration"),   html.Td("{days}d, {hours}h, {minutes}m, {seconds}s.".format(days       = hold_duration[quote].days,
+                                                                                                                                                                                     hours      = hold_duration[quote].days * 24 + hold_duration[quote].seconds // 3600,
+                                                                                                                                                                                     minutes    = (hold_duration[quote].seconds % 3600) // 60,
+                                                                                                                                                                                     seconds    = hold_duration[quote].seconds % 60), style={'color':'#a3a7b0'})]),
                                                                         ]
                                                                     )
                                                                 ],
@@ -90,7 +94,7 @@ class Dashboard:
 
                                     dbc.Row(dbc.Col(html.Hr()))
                                 ])
-                         for counter, quote in enumerate(self.existing_quoteassets)]
+                         for counter, quote in enumerate(self.existing_quoteassets) if list(self.database.get_quote_orders(quote=quote))]
                 ),
 
 

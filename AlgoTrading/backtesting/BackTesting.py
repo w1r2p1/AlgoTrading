@@ -105,7 +105,7 @@ class BackTesting:
         # To simplify the code, shift the next minute data 1 place backwards so that the indice of the next minute candle matches the hours' one that gives the signal.
         # self.df.loc[:,'close_m'] = self.df.loc[:,'close_m'].shift(-1)
 
-        min_ = int(len(self.df.index)*0.3)
+        min_ = int(len(self.df.index)*0)
         max_ = int(len(self.df.index)*1)
         self.df = self.df.iloc[min_:max_]
 
@@ -185,10 +185,15 @@ class BackTesting:
         starting_balances 	= self.starting_balances
         alloc_pct 			= self.alloc_pct
         stop_loss_pct 		= self.stop_loss_pct
-        bot = dict(self.database.get_bot(pair=pair))
+        try:
+            bot = dict(self.database.get_bot(pair=pair))
+        except Exception as e:
+            print(f"Please create the {pair} bot in the database before backtesting.")
 
+        # Get the df from the file and prepare it
         self.prepare_df()
 
+        # Compute the indicators
         self.compute_indicators()
 
         # Set the first point
@@ -627,21 +632,21 @@ class MpGridSearch:
 if __name__ == '__main__':
 
     """ Run a single backtest """
-    BackTesting(timeframe		  = '5m',
+    BackTesting(timeframe		  = '1h',
                 quote    		  = 'BTC',
                 pair      		  = 'ETHBTC',
-                strategy_name     = 'Gap_and_go',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go
+                strategy_name     = 'Crossover',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go
                 starting_balances = dict(quote=1, base=0),
-                # indic_1			  = dict(indicator='ssf', length=10*60,  close='close'),		# Crossover	( best : 5*24, 40*24 )
-                # indic_2			  = dict(indicator='ssf', length=30*60, close='close'),		# Crossover
+                indic_1			  = dict(indicator='ssf', length=5*24,  close='close'),		# Crossover	( best : 5*24, 40*24 )
+                indic_2			  = dict(indicator='ssf', length=40*24, close='close'),		    # Crossover
                 # indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
                 # indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
                 # indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
                 # indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
-                # indic_2			  = dict(indicator='bbands', length=80, close='spread'),		# Mean_Reversion_spread
+                # indic_2			  = dict(indicator='bbands', length=80, close='spread'),	# Mean_Reversion_spread
                 alloc_pct         = 100,
                 plot              = True,
-                stop_loss_pct     = 5,
+                stop_loss_pct     = 2,
                 ).backtest()
 
 

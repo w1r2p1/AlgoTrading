@@ -143,7 +143,7 @@ class Trading:
                 # print("\tChecked all pairs for signals.")
 
                 # Summary of the search
-                print(f"\n\t({self.nb_buys_this_candle} {'buy' if self.nb_buys_this_candle==1 else 'buys'}, {self.nb_sells_this_candle} {'sell' if self.nb_sells_this_candle==1 else 'sells'}.) \n")
+                print(f"\n\t({self.nb_buys_this_candle} {'buy' if self.nb_buys_this_candle<2 else 'buys'}, {self.nb_sells_this_candle} {'sell' if self.nb_sells_this_candle<2 else 'sells'}.) \n")
 
                 # # For real trading only, check if the values stored in the db are identical to those on Binance.
                 # if not self.paper_trading:
@@ -176,7 +176,7 @@ class Trading:
 
         if signal == 'buy':
             try:
-                order_type = "MARKET"
+                order_type = "LIMIT"
                 # Mandatory parameters to send to the endpoint:
                 buy_order_parameters = dict(symbol = pair,
                                             side   = "BUY",
@@ -238,7 +238,6 @@ class Trading:
                                                                                                                                                                                          price      = buy_order_result['price'] if order_type!='MARKET' else 'market price',
                                                                                                                                                                                          quote      = quote if order_type!='MARKET' else '',
                                                                                                                                                                                          quoteQty   = buy_order_result['cummulativeQuoteQty'])
-
                     print(text)
 
                     # Compute the time taken to fill the order
@@ -246,6 +245,7 @@ class Trading:
 
                     # Compute the fees in quote and BNB
                     quote_fee = Decimal(buy_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
+                    # The BNB fees are computed with a small error do to the difference in price between GetLastestPriceOfPair() and the actual price
                     BNB_fee   = quote_fee / Decimal(self.exchange.GetLastestPriceOfPair(pair='BNB'+quote))
 
                     self.database.save_order(quote             = quote,
@@ -273,7 +273,7 @@ class Trading:
                                                              real_balance               = self.exchange.GetAccountBalance(asset=quote).get('free'),
                                                              real_locked                = self.exchange.GetAccountBalance(asset=quote).get('locked'),
                                                              internal_balance           = "-" + buy_order_result['cummulativeQuoteQty'],                                                                   # Added
-                                                             internal_locked            = format(round(Decimal(buy_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),                # Added
+                                                             # internal_locked            = format(round(Decimal(buy_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),              # Added
                                                              internal_profit            = '0',                                                                                                             # Added
                                                              internal_quote_fees        = format(round(quote_fee,    bot['quoteAssetPrecision']), 'f'),                                                    # Added
                                                              internal_BNB_fees          = format(round(BNB_fee,      bot['BNB_precision']),       'f'),                                                    # Added
@@ -334,10 +334,11 @@ class Trading:
             try:
                 previously_locked_in_the_trade = bot['quote_lockedintrade']                                                                # On a pas encore update la balance donc on sait pour combien de quote a acheté
 
+                order_type = 'LIMIT'
                 # Mandatory parameters to send to the endpoint:
                 sell_order_parameters = dict(symbol = pair,
                                              side   = "SELL",
-                                             type   = "MARKET" if not kwargs.get('liquidate_position', False) else 'MARKET')
+                                             type   = order_type if not kwargs.get('liquidate_position', False) else 'MARKET')
 
                 sell_price, quantity = Decimal('0'), Decimal('0')
                 market_price = Decimal(self.exchange.GetLastestPriceOfPair(pair=pair))
@@ -391,6 +392,7 @@ class Trading:
                     profit            = Decimal(sell_order_result['cummulativeQuoteQty']) - Decimal(previously_locked_in_the_trade)
                     quote_fee         = Decimal(sell_order_result['cummulativeQuoteQty'])*Decimal(0.075)/Decimal(100)
                     profit_minus_fees = profit - quote_fee - Decimal(dict(list(self.database.get_orders_of_bot(pair))[-1])['quote_fee'])   # Include the quote fees from the sell and the buy
+                    # The BNB fees are computed with a small error do to the difference in price between GetLastestPriceOfPair() and the actual price
                     BNB_fee           = quote_fee / Decimal(self.exchange.GetLastestPriceOfPair(pair=f"BNB{quote}"))
 
                     # How long we have been holding the asset for
@@ -401,8 +403,8 @@ class Trading:
                                                                                                                                                                                                                                  pair       = pair,
                                                                                                                                                                                                                                  quantity   = sell_order_result['executedQty'],
                                                                                                                                                                                                                                  base       = pair.replace(quote, ''),
-                                                                                                                                                                                                                                 price      = sell_order_result['price'],
-                                                                                                                                                                                                                                 quote      = quote,
+                                                                                                                                                                                                                                 price      = sell_order_result['price'] if order_type!='MARKET' else 'market price',
+                                                                                                                                                                                                                                 quote      = quote if order_type!='MARKET' else '',
                                                                                                                                                                                                                                  quoteQty   = sell_order_result['cummulativeQuoteQty'],
                                                                                                                                                                                                                                  profit_minus_fees = format(round(profit_minus_fees, bot['quoteAssetPrecision']), 'f'))
                     print(text)
@@ -442,7 +444,7 @@ class Trading:
                                                              real_balance               = self.exchange.GetAccountBalance(asset=quote).get('free'),
                                                              real_locked                = self.exchange.GetAccountBalance(asset=quote).get('locked'),
                                                              internal_balance           = format(round(Decimal(sell_order_result['cummulativeQuoteQty']), bot['quoteAssetPrecision']), 'f'),   # Added
-                                                             internal_locked            = "-" + previously_locked_in_the_trade,                                                                # Added
+                                                             # internal_locked            = "-" + previously_locked_in_the_trade,                                                                # Added
                                                              internal_profit            = format(round(profit,    bot['quoteAssetPrecision']), 'f'),                                           # Added
                                                              internal_quote_fees        = format(round(quote_fee, bot['quoteAssetPrecision']), 'f'),                                           # Added
                                                              internal_BNB_fees          = format(round(BNB_fee,   bot['BNB_precision']),       'f'),                                           # Added
@@ -842,7 +844,7 @@ if __name__ == "__main__":
     trading = Trading(paper_trading      = True,
                       timeframe          = '1m',
                       quotes_to_trade_on = ['ETH'],
-                      bots_per_quote     = 1,
+                      bots_per_quote     = 5,
                       send_to_telegram   = False,
                       )
 

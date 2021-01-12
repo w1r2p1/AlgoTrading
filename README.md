@@ -27,7 +27,7 @@ Connection to Binance :
 - [Create an API key](https://www.binance.com/fr/support/faq/360002502072) in your Binance user profile;
 - In `/assets`: store your Binance API key in `credentials.txt`
 
-Connexion to Telegram (optional):
+Connection to Telegram (optional):
 - Configure a bot by [talking to the BotFather](https://core.telegram.org/bots);
 - In `/assets`: store your Telegram credentials in `telegram_config.cfg`
 

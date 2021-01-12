@@ -372,7 +372,7 @@ class Trading:
 
                 if "code" in sell_order_result or sell_order_result['status']!='FILLED':
                     formatted_transactTime = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime('%H:%M:%S')
-                    print(f"\t{formatted_transactTime} - Error in placing a sell {'test ' if self.paper_trading else ''}order on {pair} at {format(round(buy_price, bot['baseAssetPrecision']), 'f')} {quote} :/")
+                    print(f"\t{formatted_transactTime} - Error in placing a sell {'test ' if self.paper_trading else ''}order on {pair} at {format(round(sell_price, bot['baseAssetPrecision']), 'f')} {quote} :/")
                     # print(pair, sell_order_result)
                     return None
 

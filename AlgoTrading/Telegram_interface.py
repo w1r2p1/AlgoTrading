@@ -6,6 +6,8 @@ from Exchange import Binance
 from Database import BotDatabase
 from decimal import Decimal
 from datetime  import datetime
+from   yaspin   import yaspin
+import colorama
 
 
 class TelegramInterface:
@@ -218,8 +220,12 @@ class TelegramInterface:
         updater.dispatcher.add_handler(CallbackQueryHandler(self.Select_Quote_Menu,      pattern='Pair_stats'))
         updater.dispatcher.add_handler(CallbackQueryHandler(self.Select_Base_Menu,       pattern=self.quotes))
         updater.dispatcher.add_handler(CallbackQueryHandler(self.PairStats,              pattern=self.pairs))
-
         updater.start_polling()
+
+        sp = yaspin()
+        sp.start()
+        color = colorama.Fore.BLUE if self. paper_trading else colorama.Fore.GREEN
+        sp.text = color + "The Telegram bot is running. Type '/start' in Telegram."
 
 
 if __name__ == '__main__':

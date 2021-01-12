@@ -18,12 +18,22 @@ This project implements the necessary functionalities to engage in 24/7 crypto a
 - [x] **Telegram Interface**: Provide a performance status of your current trades.
 - [x] **Speed**: Multiprocessing is implemented across the algo to speed it up.
 
+**New** : run `/experimentations/live_orderbook.py` to display the orderbook in real time, along with the evolution of imbalance value and the price.
 
 ## Basic Usage
 
-In `/assets`: store your Binance API key in 'credentials.txt' , and your telegram credentials in 'telegram_config.cfg'.
+Connexion to Binance :
+- [Create an API key](https://www.binance.com/fr/support/faq/360002502072) in your Binance user profile;
+- In `/assets`: store your Binance API key in 'credentials.txt'
 
-Trading can be entirely managed from `Trading.py`. Additionally, run `Dashboard.py` to display a live dashboard (GUI) to get performance metrics, and `Telegram_interface.py` to get a Telegram interface.
+Connexion to Telegram (optional):
+- Configure a bot by talking to the BotFather (https://core.telegram.org/bots);
+- In `/assets`: store your Telegram credentials in 'telegram_config.cfg'
+
+
+Trading can be entirely managed from `Trading.py`.
+Additionally, run `Dashboard.py` to display a live dashboard (GUI) to get performance metrics, and `Telegram_interface.py` to get a Telegram interface.
+
 
 ### Structure
 
@@ -34,10 +44,16 @@ The code is organized as follows :
 - `Database.py`: Manages the databases. One database for paper_trading, another for live trading.
 - `Echange.py`: Manages the interface with Binance's REST API.
 - `Helpers.py`: Helper methods.
-- `/assets.py`: stores some usefull files, and the Binance and Telegram credentials.
-- `/backtesting.py`: Multiple scripts to backtest strategies.
-- `/experimentations.py`: Files in progress to test personal ideas.
+- `/assets`: stores some usefull files, and the Binance and Telegram credentials.
+- `/backtesting`: Multiple scripts to backtest strategies.
+- `/experimentations`: Files in progress to test personal ideas.
 
+
+## To-Do
+
+- Create a simple GUI for `Trading.py`
+- Investigate minute timeframe strategies
+- Investigate orderbook imbalance strategies
 
 
 ## Disclaimer
@@ -46,5 +62,4 @@ This software is for educational purposes only. Do not risk money which
 you are afraid to lose. USE THE SOFTWARE AT YOUR OWN RISK. THE AUTHOR ASSUMES NO RESPONSIBILITY FOR YOUR TRADING RESULTS.
 
 Always start by running the algo in paper-trading mode and do not engage money
-before you understand how it works and what profit/loss you should
-expect.
+before you understand how it works and what profit/loss you should expect.

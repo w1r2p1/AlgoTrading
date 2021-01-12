@@ -93,7 +93,7 @@ class Trading:
         parser = cfg.ConfigParser()
         parser.read("assets/telegram_config.cfg")
         self.bot_token  = parser.get('creds', 'token')
-        self.bot_chatID = '456212622'
+        self.bot_chatID = parser.get('chatID', 'ID')
 
 
     def start(self):
@@ -176,7 +176,7 @@ class Trading:
 
         if signal == 'buy':
             try:
-                order_type = "LIMIT"
+                order_type = "MARKET"
                 # Mandatory parameters to send to the endpoint:
                 buy_order_parameters = dict(symbol = pair,
                                             side   = "BUY",
@@ -224,9 +224,9 @@ class Trading:
 
                 if "code" in buy_order_result or buy_order_result['status']!='FILLED':
                     formatted_transactTime = datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime('%H:%M:%S')
-                    print(f"\t{formatted_transactTime} - Error in placing a buy {'test' if self.paper_trading else ''} order on {pair} at {buy_price} :/")
+                    print(f"\t{formatted_transactTime} - Error in placing a buy {'test' if self.paper_trading else ''} order on {pair} at {format(round(buy_price, bot['baseAssetPrecision']), 'f')} {quote} :/")
                     self.database.update_bot(pair=pair, status='', quote_allocation='')
-                    print(pair, buy_order_result)
+                    # print(pair, buy_order_result)
                     return None
 
                 else:
@@ -285,22 +285,14 @@ class Trading:
                     if self.send_to_telegram:
                         self.send_text_to_telegram(text)
 
-                    # dict_to_fill[pair] = [datetime.utcfromtimestamp(int(buy_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                    #                       Decimal(buy_order_result['price']).normalize(),
-                    #                       Decimal(buy_order_result['executedQty']).normalize(),
-                    #                       Decimal(buy_order_result['cummulativeQuoteQty']).normalize()]
                     self.nb_buys_this_candle += 1
 
             except Exception as e:
                 self.database.update_bot(pair=pair, status='', quote_allocation='')
                 print(f'\tError in processing a {"test" if self.paper_trading else ""} buy order on {pair}. Error : {e}.')
-                # dict_to_fill[pair] = []
 
         else:
             self.database.update_bot(pair=pair, status='', quote_allocation='')
-            # dict_to_fill[pair] = []
-
-        # return dict_to_fill
 
 
     def sell_order(self, bot:dict, **kwargs):
@@ -334,7 +326,7 @@ class Trading:
             try:
                 previously_locked_in_the_trade = bot['quote_lockedintrade']                                                                # On a pas encore update la balance donc on sait pour combien de quote a acheté
 
-                order_type = 'LIMIT'
+                order_type = 'MARKET'
                 # Mandatory parameters to send to the endpoint:
                 sell_order_parameters = dict(symbol = pair,
                                              side   = "SELL",
@@ -380,8 +372,8 @@ class Trading:
 
                 if "code" in sell_order_result or sell_order_result['status']!='FILLED':
                     formatted_transactTime = datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime('%H:%M:%S')
-                    print(f"\t{formatted_transactTime} - Error in placing a sell {'test ' if self.paper_trading else ''}order on {pair} at {sell_price} :/")
-                    print(pair, sell_order_result)
+                    print(f"\t{formatted_transactTime} - Error in placing a sell {'test ' if self.paper_trading else ''}order on {pair} at {format(round(buy_price, bot['baseAssetPrecision']), 'f')} {quote} :/")
+                    # print(pair, sell_order_result)
                     return None
 
                 else:
@@ -438,7 +430,7 @@ class Trading:
                         self.database.update_bot(pair=pair, profitable_sells=+1)
                     else:
                         self.database.update_bot(pair=pair, unprofitable_sells=+1)
-                    print(self.exchange.GetAccountBalance(asset=quote).get('free'))
+
                     # Update the internal balances count
                     self.database.update_db_account_balances(quote                      = quote,
                                                              real_balance               = self.exchange.GetAccountBalance(asset=quote).get('free'),
@@ -458,22 +450,11 @@ class Trading:
                         if kwargs.get('liquidate_position', False):
                             self.send_text_to_telegram(f'Liquidated the position on {pair}.')
 
-                    # dict_to_fill[pair] = [datetime.utcfromtimestamp(int(sell_order_result['transactTime'])/1000).strftime("%H:%M:%S"),
-                    #                       Decimal(sell_order_result['price']).normalize(),
-                    #                       Decimal(sell_order_result['executedQty']).normalize(),
-                    #                       Decimal(sell_order_result['cummulativeQuoteQty']).normalize()]
-
-                    # return dict_to_fill
                     self.nb_sells_this_candle += 1
 
             except Exception as e:
                 # We don't update the error in the case of an error : it still needs to sell.
                 print(f'\tError in processing a {"test " if self.paper_trading else ""}sell order on {pair}. Error : {e}.')
-                # dict_to_fill[pair] = []
-        # else:
-        #     dict_to_fill[pair] = []
-
-        # return dict_to_fill
 
 
     def send_text_to_telegram(self, message):
@@ -553,7 +534,9 @@ class Trading:
 
 
         if set([bot["status"] for bot in self.database.get_all_bots()]) == {''}:
+            sp.stop()
             sys.exit("\nYou can't trade on any quote. Please update the starting balance and try again.")
+        sp.stop()
 
 
     def wait_for_candle(self)->bool:
@@ -845,7 +828,7 @@ if __name__ == "__main__":
                       timeframe          = '1m',
                       quotes_to_trade_on = ['ETH'],
                       bots_per_quote     = 5,
-                      send_to_telegram   = False,
+                      send_to_telegram   = True,
                       )
 
     # Start trading

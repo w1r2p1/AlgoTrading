@@ -1,5 +1,4 @@
 from backtesting.ZigZag import *
-
 import sys
 from pmdarima.arima.utils import ndiffs
 import plotly.graph_objs as go
@@ -11,8 +10,6 @@ from pathlib import Path
 import pmdarima as pm
 import pickle
 
-# quote = 'BTC'
-# pair  = 'ELFBTC'
 
 class ArimaFit:
 

@@ -7,7 +7,6 @@ import numpy as np
 from datetime import datetime
 import sys
 from Exchange import Binance
-# from datetime import timedelta
 import datetime
 from collections import deque
 
@@ -34,7 +33,7 @@ class RealTimeOrderBook(QtGui.QMainWindow):
 
     def __init__(self,
                  parent   = None,
-                 exchange = Binance(filename='../credentials.txt'),
+                 exchange = Binance(filename='../assets/credentials.txt'),
                  quote    = 'BTC',
                  base     = 'ETH'):
         super(RealTimeOrderBook, self).__init__(parent=parent)
@@ -45,7 +44,7 @@ class RealTimeOrderBook(QtGui.QMainWindow):
         self.base     = base
 
         # Retrieve the credentials from the file
-        f = open('../credentials.txt', "r")
+        f = open('../assets/credentials.txt', "r")
         contents = []
         if f.mode == 'r':
             contents = f.read().split('\n')
@@ -196,27 +195,6 @@ class RealTimeOrderBook(QtGui.QMainWindow):
 
 
 if __name__ == "__main__":
-
-    # print(datetime.datetime.utcfromtimestamp(int(1556876873656/1000)))
-    # print(datetime.datetime.utcfromtimestamp(123456785))
-    # print(datetime.datetime.utcfromtimestamp(1499827319559//1000))
-    # print(datetime.datetime.utcfromtimestamp(2046077850//1000))
-    # timestamp = 1556876873656
-    # mytime = datetime.datetime.fromtimestamp(timestamp/1000).replace(microsecond = (timestamp % 1000) * 1000)
-    # print(mytime)
-    #
-    #
-    # milliseconds = 0
-    # if len(str(timestamp)) == 13:
-    #     milliseconds = int(str(timestamp)[-3:])
-    #     timestamp = float(str(timestamp)[0:-3])
-    #
-    # the_date = datetime.datetime.fromtimestamp(timestamp)
-    # the_date += datetime.timedelta(milliseconds=milliseconds)
-    # print(the_date)
-
-
-
 
     app = QtGui.QApplication(sys.argv)
     thisapp = RealTimeOrderBook()

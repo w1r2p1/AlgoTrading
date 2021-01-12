@@ -3,7 +3,7 @@
 
 This personal project implements the necessary functionalities to engage in 24/7 crypto algorithmic trading on Binance.
 
-![image_telegram](image_readme.png)
+![image_telegram](image_readme.jpg)
 
 ## Features
 

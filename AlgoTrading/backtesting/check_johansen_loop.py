@@ -1,7 +1,4 @@
-# check cointegration of pairs
 from Exchange import Binance
-from Database import BotDatabase
-
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
 import numpy as np
 import pandas as pd
@@ -9,9 +6,7 @@ import itertools
 from datetime import datetime
 from tqdm import tqdm
 
-
 cointegrated_pairs = []
-
 
 # pair is a df containing two ETF close price series
 def check_johansen(comb, cointegrating_pairs, timeframe):
@@ -90,8 +85,8 @@ if __name__ == '__main__':
 
     # database  = BotDatabase("database.db")
     # ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in database.get_all_bots()]))       # ['ETH', 'BTC']
-    exchange  = Binance(filename='credentials.txt')
-    pairs     = exchange.GetNameOfPairs_WithQuoteasset(['BTC'])                                         # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
+    exchange = Binance(filename='credentials.txt')
+    pairs    = exchange.GetNameOfPairs_WithQuoteasset(['BTC'])                                         # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
 
     pairs_combinations = list(itertools.combinations(pairs['BTC'], 2))
 
@@ -105,5 +100,5 @@ if __name__ == '__main__':
     print('\ncointegrated_pairs = \n', df)
 
     df.sort_values(by=['asset_1', 'asset_2'], inplace=True)
-    # df.to_csv("cointegrated_BTC_pairs_1d.csv", sep='\t', index=False)
+    df.to_csv("cointegrated_BTC_pairs_1d.csv", sep='\t', index=False)
 

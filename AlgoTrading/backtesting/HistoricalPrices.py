@@ -1,6 +1,5 @@
 from Exchange   import Binance
 from Database   import BotDatabase
-# from Indicators import *
 from backtesting import ZigZag
 
 from datetime import datetime

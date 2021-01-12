@@ -17,7 +17,6 @@ from scipy.interpolate import griddata
 from matplotlib import cm
 import statsmodels.tsa.stattools as tsa
 import statsmodels.api as sm
-from mlfinlab.optimal_mean_reversion import OrnsteinUhlenbeck
 from tqdm import tqdm
 from sklearn.linear_model import LinearRegression
 

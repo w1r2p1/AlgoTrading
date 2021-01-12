@@ -1,13 +1,9 @@
 from datetime import datetime
-from pandas_datareader import data
 import pandas as pd
 import numpy as np
-from numpy import log, polyfit, sqrt, std, subtract
 import statsmodels.tsa.stattools as ts
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
-import seaborn as sns
-import pprint
 import itertools
 import pandas_ta as ta
 from empyrical import sortino_ratio, calmar_ratio, omega_ratio, sharpe_ratio
@@ -126,7 +122,6 @@ def ADCF_test(pairs:tuple):
 
     metric  = sharpe_ratio(finaldf['port rets'], annualization=1)
     print("Sharpe ratio = ", metric)
-
 
 
 

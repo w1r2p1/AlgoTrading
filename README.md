@@ -27,7 +27,7 @@ Connexion to Binance :
 - In `/assets`: store your Binance API key in 'credentials.txt'
 
 Connexion to Telegram (optional):
-- Configure a bot by talking to the BotFather (https://core.telegram.org/bots);
+- Configure a bot by [talking to the BotFather](https://core.telegram.org/bots);
 - In `/assets`: store your Telegram credentials in 'telegram_config.cfg'
 
 
@@ -44,7 +44,7 @@ The code is organized as follows :
 - `Database.py`: Manages the databases. One database for paper_trading, another for live trading.
 - `Echange.py`: Manages the interface with Binance's REST API.
 - `Helpers.py`: Helper methods.
-- `/assets`: stores some usefull files, and the Binance and Telegram credentials.
+- `/assets`: stores the databses, some usefull files, and the Binance and Telegram credentials.
 - `/backtesting`: Multiple scripts to backtest strategies.
 - `/experimentations`: Files in progress to test personal ideas.
 

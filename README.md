@@ -50,6 +50,11 @@ The code is organized as follows :
 - `/experimentations`: Files in progress to test personal ideas.
 
 
+## In Progress
+
+- In `backtesting/backtesting.py` : Replacing the GridSearch by an Optuna optimization
+
+
 ## To-Do
 
 - Create a simple GUI for `Trading.py`

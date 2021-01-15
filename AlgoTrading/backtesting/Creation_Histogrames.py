@@ -595,7 +595,7 @@ if __name__ == "__main__":
 
     quote_     = 'BTC'
     pair_      = 'ETHBTC'
-    timeframe_ = '5m'
+    timeframe_ = '1m'
 
     print(f"_________ {pair_} _________")
 

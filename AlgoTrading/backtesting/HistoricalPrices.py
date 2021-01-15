@@ -12,16 +12,16 @@ class Histories:
     """ Class to get, update and store the historical prices of all the pairs on Binance. """
 
     def __init__(self):
-        self.database  = BotDatabase("../assets/database.db")
+        self.database  = BotDatabase("../assets/database_paper.db")
         self.exchange  = Binance(filename='../assets/credentials.txt')
         self.timeframe = '1m'
-        self.ExistingQuoteassets = list(set([dict(bot)['quoteasset'] for bot in self.database.get_all_bots()]))             # ['ETH', 'BTC']
+        self.existing_quoteassets = list(set([dict(bot)['quote'] for bot in self.database.get_all_bots()]))             # ['ETH', 'BTC']
 
 
     def GetAllHistories(self):
         """ Loop through all the quotes and paris and store their historical prices until now. """
 
-        pairs = self.exchange.GetNameOfPairs_WithQuoteasset(self.ExistingQuoteassets)                                    # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
+        pairs = self.exchange.GetNameOfPairs_WithQuoteasset(self.existing_quoteassets)                                    # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
 
         # for quote in pairs.keys():
         for quote in ['BTC']:
@@ -31,7 +31,7 @@ class Histories:
             # self.GetAndStore_HistoricalPrices(quote = quote, pair='ETHBTC')
 
             # for counter, pair in enumerate(pairs[quote]):
-            for counter, pair in enumerate(['ETHBTC']):
+            for counter, pair in enumerate(['ADABTC']):
                 # for counter, pair in tqdm(enumerate(["XRPBTC", "ETHBTC"])):
                 print(f"\nGETTING DATA FOR {pair}. {counter} out of {len(pairs[quote])}.")
                 self.GetAndStore_HistoricalPrices(quote=quote, pair=pair)

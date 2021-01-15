@@ -29,7 +29,7 @@ class ModelSelection:
         self.timeframe = timeframe
 
         self.df = self.get_df()
-        self.histos_dict = self.histograms_from_CSV()
+        # self.histos_dict = self.histograms_from_CSV()
 
         self.momentum = dict(
             ao          = (5,20),
@@ -701,7 +701,7 @@ if __name__ == '__main__':
 
     quote_     = 'BTC'
     pair_      = 'ETHBTC'
-    timeframe_ = '5m'
+    timeframe_ = '1m'
 
     # In the project directory, create a nested directory for the quoteasset if not exists
     # Path('models/' + quote_).mkdir(parents=True, exist_ok=True)

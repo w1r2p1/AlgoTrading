@@ -15,6 +15,7 @@ from   multiprocessing.pool import ThreadPool as Pool
 import time
 import plotly.graph_objs as go
 from plotly.offline import plot
+import optuna
 
 
 class BackTesting:
@@ -65,6 +66,8 @@ class BackTesting:
         else :
             self.longest_length = 1
 
+        self.rsi_lower_threshold = kwargs.get('rsi_lower_threshold', None)
+        self.rsi_upper_threshold = kwargs.get('rsi_upper_threshold', None)
 
     def prepare_df(self):
 
@@ -174,6 +177,16 @@ class BackTesting:
             low_of_last_green_candle = self.find_low_of_last_green_candle(start_at=i-1)
             signal = 'sell' if price > high_of_last_red_candle else 'buy' if price < low_of_last_green_candle  else ''
 
+        if self.strategy_name=='RSI':
+            self.rsi_upper_threshold = self.rsi_lower_threshold
+            rsi         = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
+            rsi_shifted = self.df[self.indicators_dict['1']['indic_name']].iloc[i-1]
+            # bband_l		   = self.df['bband_l'].iloc[i]
+            # bband_u		   = self.df['bband_u'].iloc[i]
+            signal = 'buy' if rsi > self.rsi_lower_threshold > rsi_shifted else 'sell' if rsi < self.rsi_upper_threshold < rsi_shifted else ''
+            # signal = 'buy' if rsi > bband_l > rsi_shifted else 'sell' if rsi < bband_u < rsi_shifted else ''
+
+
         self.df.loc[self.df.index[i],'signal'] = signal
         return signal
 
@@ -185,6 +198,7 @@ class BackTesting:
         starting_balances 	= self.starting_balances
         alloc_pct 			= self.alloc_pct
         stop_loss_pct 		= self.stop_loss_pct
+        bot                 = {}
         try:
             bot = dict(self.database.get_bot(pair=pair))
         except Exception as e:
@@ -211,8 +225,8 @@ class BackTesting:
 
         # Go through all candlesticks
         hourly_close = self.df.loc[:,'close_h']
-        for i in tqdm(range(self.longest_length, len(hourly_close)-1)):      # tqdm : progress bar
-            # for i in range(self.longest_length, len(hourly_close)-1):
+        # for i in tqdm(range(self.longest_length, len(hourly_close)-1)):      # tqdm : progress bar
+        for i in range(self.longest_length, len(hourly_close)-1):
 
             # Look for a signal
             signal = self.find_signal(i=i)
@@ -233,6 +247,7 @@ class BackTesting:
                     # To simulate the spread, we sell on the following minute candle.
                     price_base_next_minute = Decimal(self.df['close_m'].iloc[i+1])
                     self.df.loc[self.df.index[i], 'sellprice_'+pair] = price_base_next_minute
+                    # self.df.loc[self.df.index[i], 'sell_on_rsi'] = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
 
                     base_quantity_to_sell   = self.helpers.RoundToValidQuantity(bot=bot, quantity=base_balance)
                     quote_quantity_sell     = base_quantity_to_sell*price_base_next_minute
@@ -262,6 +277,7 @@ class BackTesting:
                 price_base_this_minute = Decimal(self.df['close_h'].iloc[i])
                 price_base_next_minute = Decimal(self.df['close_m'].iloc[i+1])
                 self.df.loc[self.df.index[i], 'buyprice_'+pair] = price_base_next_minute
+                # self.df.loc[self.df.index[i], 'buy_on_rsi'] = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
 
                 base_quantity_to_buy   = self.helpers.RoundToValidQuantity(bot=bot, quantity=quote_balance/price_base_this_minute*alloc_pct/100)
                 quote_quantity_buy     = base_quantity_to_buy*price_base_next_minute
@@ -301,6 +317,11 @@ class BackTesting:
             print(f'Winning trades : {trades["nb_win_trades"]} ({int(trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"])*100)}%)')
             print(f'Losing trades  : {trades["nb_los_trades"]} ({int((1-trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"]))*100)}%)')
 
+            quotebalance = self.df.loc[:, 'quote_balance'].dropna().astype(float)
+            i = np.argmax(np.maximum.accumulate(quotebalance) - quotebalance) # end of the period
+            j = np.argmax(quotebalance[:i]) # start of period
+            print(f'Max drawdown : {round((quotebalance[i]/quotebalance[j]-1)*100, 1)}%')
+
             # Remove 0s & NaNs and compute metric
             temp    = self.df.loc[:,'quote_balance'].astype(float)
             cleaned = temp[np.where(temp, True, False)].dropna().pct_change()
@@ -326,10 +347,7 @@ class BackTesting:
         trades        = kwargs.get('trades', {})
         metric        = kwargs.get('metric', 0)
 
-        # print(self.df.columns)
-        # print(self.df)
-
-        min_indice = -500
+        min_indice = -1000
         max_indice = None
 
         if self.strategy_name == 'Gap_and_go':
@@ -383,6 +401,37 @@ class BackTesting:
                 "paper_bgcolor": "#23272c"}
 
             plot(fig)
+
+        elif self.strategy_name == 'RSI':
+            fig, (ax2, ax3) = plt.subplots(2, 1, figsize=(14,12))
+
+            # First plot - Price
+            ax2.plot(self.df.index[min_indice:max_indice], self.df.loc[:, 'close_h'][min_indice:max_indice], c='blue',  label=f"{pair} price", linestyle='-')
+            ax2.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}    -    Stop-loss={stoploss}%    -    Indicators : {[indic_dict["indic_name"] for indic_dict in self.indicators_dict.values()]}    -    alloc={alloc_pct}%    -    Trades : {trades["nb_trades"]}    -    Thresholds={self.rsi_lower_threshold, self.rsi_upper_threshold}\n\nQuantity of coins held')
+            # Add the buys and sells
+            ax2.scatter(self.df.index[min_indice:max_indice], self.df['buyprice_'+pair].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
+            ax2.scatter(self.df.index[min_indice:max_indice], self.df['sellprice_'+pair].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
+            ax2.legend(loc="upper left")
+            ax2.set_ylabel(f'{quote} balance')
+            ax2.tick_params(axis='y',  colors='blue')
+
+            # Second plot - RSI
+            ax3.plot(self.df.index[min_indice:max_indice], self.df[self.indicators_dict['1']['indic_name']].iloc[min_indice:max_indice], c='black',  label=f"RSI", linestyle='-')
+            # ax3.plot(self.df.index[min_indice:max_indice], self.df['bband_l'].iloc[min_indice:max_indice], c='blue',  label=f"bband_l", linestyle='-')
+            # ax3.plot(self.df.index[min_indice:max_indice], self.df['bband_u'].iloc[min_indice:max_indice], c='blue',  label=f"bband_u", linestyle='-')
+            # Add the buys and sells
+            # ax3.scatter(self.df.index[min_indice:max_indice], self.df['buy_on_rsi'].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
+            # ax3.scatter(self.df.index[min_indice:max_indice], self.df['sell_on_rsi'].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
+            ax3.set_title(f'RSI')
+            ax3.legend(loc="upper left")
+            ax3.set_ylabel(f'RSI value')
+            ax3.tick_params(axis='y',  colors='black')
+            ax3.axhline(50, color='blue',  linestyle='--')
+            # ax3.axhline(self.rsi_lower_threshold, color='black',  linestyle='--')
+            # ax3.axhline(self.rsi_upper_threshold, color='black',  linestyle='--')
+            plt.subplots_adjust(hspace=10)
+            plt.show()
+
         else:
             fig, ax1 = plt.subplots(figsize=(14,10))
             # First plot
@@ -414,7 +463,10 @@ class BackTesting:
         ax2.plot(self.df.index[quote_mask], self.df.loc[:, 'quote_balance'][quote_mask], c='blue',  label=f"{quote} balance", linestyle='-', marker='o')
         ax2.plot([], [], 	 					         						         c='green', label=f"{pair.replace(quote, '')} balance", linestyle='-', marker='o')	# Empty plot just for the label
         ax4.plot(self.df.index[base_mask], self.df.loc[:, 'base_balance'][base_mask],    c='green', linestyle='-', marker='o')
-        ax2.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}    -    Stop-loss={stoploss}%    -    Indicators : {[indic_dict["indic_name"] for indic_dict in self.indicators_dict.values()]}    -    alloc={alloc_pct}%    -    Trades : {trades["nb_trades"]}    -    Metric={round(metric,2)}\n\nQuantity of coins held')
+        if 'RSI' in self.strategy_name:
+            ax2.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}    -    Stop-loss={stoploss}%    -    Indicators : {[indic_dict["indic_name"] for indic_dict in self.indicators_dict.values()]}    -    alloc={alloc_pct}%    -    Trades : {trades["nb_trades"]}    -    Thresholds={self.rsi_lower_threshold, self.rsi_upper_threshold}\n\nQuantity of coins held')
+        else:
+            ax2.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}    -    Stop-loss={stoploss}%    -    Indicators : {[indic_dict["indic_name"] for indic_dict in self.indicators_dict.values()]}    -    alloc={alloc_pct}%    -    Trades : {trades["nb_trades"]}    -    Metric={round(metric,2)}\n\nQuantity of coins held')
         ax2.legend(loc="upper left")
         ax2.set_ylabel(f'{quote} balance')
         ax4.set_ylabel(f'{pair.replace(quote, "")} balance')
@@ -480,14 +532,16 @@ class MpGridSearch:
         self.timeframe = timeframe
         self.pair = pair
         self.strategy_name = strategy_name
-        self.results                  = dict()
-        self.results['length_fast']   = []
-        self.results['length_slow']   = []
-        self.results['length']   	  = []
-        self.results['length_slope']  = []
-        self.results['length_bbands'] = []
-        self.results['stop_loss_pct'] = []
-        self.results['quote_profits'] = []
+        self.results                        = dict()
+        self.results['length_fast']         = []
+        self.results['length_slow']         = []
+        self.results['length']   	        = []
+        self.results['length_slope']        = []
+        self.results['length_bbands']       = []
+        self.results['rsi_lower_threshold'] = []
+        self.results['rsi_upper_threshold'] = []
+        self.results['stop_loss_pct']       = []
+        self.results['quote_profits']       = []
 
         if strategy_name=='Crossover':
             self.fast          = np.linspace(start=2,  stop=10,  num=5)
@@ -508,23 +562,37 @@ class MpGridSearch:
             self.bbands_length = np.linspace(start=5,  stop=20,  num=4)
             self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
             self.paramlist = list(itertools.product(self.indic, self.bbands_length, self.stop_loss_pct))
+        if strategy_name=='RSI':
+            # self.indic         = np.linspace(start=5,  stop=20,  num=7)
+            self.indic         = [1, 3, 5, 7, 9, 11, 13]
+            self.rsi_lower_threshold = np.linspace(start=40,  stop=80,  num=9)
+            # self.rsi_upper_threshold = np.linspace(start=40,  stop=80,   num=9)
+            # self.paramlist = list(itertools.product(self.indic, self.rsi_lower_threshold, self.rsi_upper_threshold))
+            self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+            self.paramlist = list(itertools.product(self.indic, self.rsi_lower_threshold, self.stop_loss_pct))
 
     def run_backtest(self, params:list):
 
         indic_1 = {}
         indic_2 = {}
+        rsi_lower_threshold = None
+        rsi_upper_threshold = None
 
         if self.strategy_name=='Crossover':
-            indic_1 = dict(indicator='ssf',    length=int(params[0])*60, close='close')
-            indic_2 = dict(indicator='ssf',    length=int(params[1])*60, close='close')
+            indic_1 = dict(indicator='ssf',    length=int(params[0]), close='close')
+            indic_2 = dict(indicator='ssf',    length=int(params[1]), close='close')
         elif self.strategy_name=='MA_slope':
-            indic_1 = dict(indicator='ssf',    length=int(params[0]),    close='close')
-            indic_2 = dict(indicator='slope',  length=int(params[1]),    close=f'ssf_{int(params[0])}')
+            indic_1 = dict(indicator='ssf',    length=int(params[0]), close='close')
+            indic_2 = dict(indicator='slope',  length=int(params[1]), close=f'ssf_{int(params[0])}')
         elif self.strategy_name=='Mean_Reversion_simple':
-            indic_1	= dict(indicator='ssf',    length=int(params[0]),    close='close')
+            indic_1	= dict(indicator='ssf',    length=int(params[0]), close='close')
         elif self.strategy_name=='Mean_Reversion_spread':
-            indic_1	= dict(indicator='ssf',    length=int(params[0]),    close='close')
-            indic_2	= dict(indicator='bbands', length=int(params[1]),    close='spread')
+            indic_1	= dict(indicator='ssf',    length=int(params[0]), close='close')
+            indic_2	= dict(indicator='bbands', length=int(params[1]), close='spread')
+        elif self.strategy_name=='RSI':
+            indic_1	= dict(indicator='rsi',    length=int(params[0])*24, close='close')
+            rsi_lower_threshold = int(params[1])
+            # rsi_upper_threshold = int(params[2])
 
         backtester = BackTesting(self.timeframe,
                                  quote   		   = 'BTC',
@@ -535,7 +603,9 @@ class MpGridSearch:
                                  indic_2		   = indic_2,
                                  alloc_pct         = 100,
                                  plot              = False,
-                                 stop_loss_pct     = params[-1],
+                                 stop_loss_pct     = int(params[-1]),
+                                 rsi_lower_threshold = rsi_lower_threshold,
+                                 rsi_upper_threshold = rsi_upper_threshold,
                                  )
         quote_profits_, _ = backtester.backtest()
 
@@ -552,6 +622,10 @@ class MpGridSearch:
         elif self.strategy_name=='Mean_Reversion_spread':
             self.results['length'].append(params[0])
             self.results['length_bbands'].append(params[1])
+        elif self.strategy_name=='RSI':
+            self.results['length'].append(params[0])
+            self.results['rsi_lower_threshold'].append(params[1])
+            # self.results['rsi_upper_threshold'].append(params[2])
 
         self.results['stop_loss_pct'].append(params[-1])
         self.results['quote_profits'].append(quote_profits_)
@@ -625,94 +699,192 @@ class MpGridSearch:
                                            yaxis_title='Length slope',
                                            zaxis_title='stop_loss_pct',))
 
+        if self.strategy_name=='RSI':
+            # df_ = pd.DataFrame({'length'              : self.results['length'],
+            #                     'rsi_lower_threshold' : self.results['rsi_lower_threshold'],
+            #                     'rsi_upper_threshold' : self.results['rsi_upper_threshold'],
+            #                     'quote_profits'       : self.results['quote_profits']})
+            # fig.add_trace(go.Scatter3d(x=df_.loc[:,'length'], y=df_.loc[:,'rsi_lower_threshold'], z=df_.loc[:,'rsi_upper_threshold'],
+            #                            mode='markers',
+            #                            marker=dict(
+            #                                size       = 5,
+            #                                color      = df_.loc[:,'quote_profits'],      	# set color to an array/list of desired values
+            #                                colorscale = 'Viridis',                   		# choose a colorscale
+            #                                opacity    = 0.8,
+            #                                colorbar   = dict(thickness = 20,
+            #                                                  title     = "BTC profits %"),
+            #                            )))
+            # fig.update_layout(scene = dict(xaxis_title='Length',
+            #                                yaxis_title='rsi_lower_threshold slope',
+            #                                zaxis_title='rsi_upper_threshold',))
+
+            # df_ = pd.DataFrame({'length'        : self.results['length'],
+            #                     'rsi_lower_threshold' : self.results['rsi_lower_threshold'],
+            #                     'quote_profits' : self.results['quote_profits']})
+            # fig.add_trace(go.Scatter3d(x=df_.loc[:,'length'], y=df_.loc[:,'rsi_lower_threshold'], z=df_.loc[:,'quote_profits'],
+            #                            mode='markers',
+            #                            marker=dict(
+            #                                size       = 5,
+            #                                color      = 'blue',      	# set color to an array/list of desired values
+            #                            )))
+            # fig.update_layout(scene = dict(xaxis_title='length',
+            #                                yaxis_title='rsi_lower_threshold',
+            #                                zaxis_title='quote_profits',))
+
+            df_ = pd.DataFrame({'length'              : self.results['length'],
+                                'rsi_lower_threshold' : self.results['rsi_lower_threshold'],
+                                'stop_loss_pct'       : self.results['stop_loss_pct'],
+                                'quote_profits'       : self.results['quote_profits']})
+            fig.add_trace(go.Scatter3d(x=df_.loc[:,'length'], y=df_.loc[:,'rsi_lower_threshold'], z=df_.loc[:,'stop_loss_pct'],
+                                       mode='markers',
+                                       marker=dict(
+                                           size       = 5,
+                                           color      = df_.loc[:,'quote_profits'],      	# set color to an array/list of desired values
+                                           colorscale = 'Viridis',                   		# choose a colorscale
+                                           opacity    = 0.8,
+                                           colorbar   = dict(thickness = 20,
+                                                             title     = "BTC profits %"),
+                                       )))
+            fig.update_layout(scene = dict(xaxis_title='Length',
+                                           yaxis_title='rsi_threshold',
+                                           zaxis_title='stop_loss_pct',))
+
+
         fig.update_layout(title = f"{self.pair} - {self.strategy_name} - {self.timeframe}",)
         fig.show()
+
+
+class OptunaOptimization:
+
+    def __init__(self, timeframe:str, pair:str, strategy_name:str):
+        self.timeframe = timeframe
+        self.pair = pair
+        self.strategy_name = strategy_name
+        # self.results                        = dict()
+        # self.results['length_fast']         = []
+        # self.results['length_slow']         = []
+        # self.results['length']   	        = []
+        # self.results['length_slope']        = []
+        # self.results['length_bbands']       = []
+        # self.results['rsi_lower_threshold'] = []
+        # self.results['rsi_upper_threshold'] = []
+        # self.results['stop_loss_pct']       = []
+        # self.results['quote_profits']       = []
+
+        # if strategy_name=='Crossover':
+        #     self.fast          = np.linspace(start=2,  stop=10,  num=5)
+        #     self.slow          = np.linspace(start=20, stop=40, num=3)
+        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+        #     self.paramlist = list(itertools.product(self.fast, self.slow, self.stop_loss_pct))
+        # if strategy_name=='MA_slope':
+        #     self.indic         = np.linspace(start=5,  stop=20,  num=4)
+        #     self.slope         = np.linspace(start=30, stop=100, num=8)
+        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+        #     self.paramlist = list(itertools.product(self.indic, self.slope, self.stop_loss_pct))
+        # if strategy_name=='Mean_Reversion_simple':
+        #     self.indic         = np.linspace(start=5,  stop=20,  num=4)
+        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+        #     self.paramlist = list(itertools.product(self.indic, self.stop_loss_pct))
+        # if strategy_name=='Mean_Reversion_spread':
+        #     self.indic         = np.linspace(start=5,  stop=20,  num=4)
+        #     self.bbands_length = np.linspace(start=5,  stop=20,  num=4)
+        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+        #     self.paramlist = list(itertools.product(self.indic, self.bbands_length, self.stop_loss_pct))
+        # if strategy_name=='RSI':
+        #     # self.indic         = np.linspace(start=5,  stop=20,  num=7)
+        #     self.indic         = [1, 3, 5, 7, 9, 11, 13]
+        #     self.rsi_lower_threshold = np.linspace(start=40,  stop=80,  num=9)
+        #     # self.rsi_upper_threshold = np.linspace(start=40,  stop=80,   num=9)
+        #     # self.paramlist = list(itertools.product(self.indic, self.rsi_lower_threshold, self.rsi_upper_threshold))
+        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
+        #     self.paramlist = list(itertools.product(self.indic, self.rsi_lower_threshold, self.stop_loss_pct))
+
+    def objective(self, trial):
+        """ Function to be maximized """
+
+        length_1 = trial.suggest_int('length_1', 5, 20)
+        # length_2 = trial.suggest_int('length_2', 5, 20)
+        stop_loss_pct = trial.suggest_int('stop_loss_pct', 1, 5)
+
+        indic_2 = {}
+        rsi_lower_threshold = None
+        rsi_upper_threshold = None
+        length_2 = None
+
+        # Suggest values of the hyperparameters using a trial object.
+        indic_1 = dict(indicator='ssf' if self.strategy_name!='RSI' else 'rsi',    length=length_1*24, close='close')
+        if self.strategy_name=='Crossover':
+            indic_2 = dict(indicator='ssf',    length=length_2, close='close')
+        elif self.strategy_name=='MA_slope':
+            indic_2 = dict(indicator='slope',  length=length_2, close=f'ssf_{length_1}')
+        elif self.strategy_name=='Mean_Reversion_spread':
+            indic_2	= dict(indicator='bbands', length=length_2, close='spread')
+        elif self.strategy_name=='RSI':
+            rsi_lower_threshold = trial.suggest_int('rsi_lower_threshold', 30, 70)
+            # rsi_upper_threshold = trial.suggest_int('rsi_upper_threshold', 55, 70)
+
+        backtester = BackTesting(self.timeframe,
+                                 quote   		     = 'BTC',
+                                 pair      		     = 'ETHBTC',
+                                 strategy_name	     = self.strategy_name,				# Crossover, Mean_Reversion_simple, MA_slope
+                                 starting_balances   = dict(quote=1, base=0),
+                                 indic_1		     = indic_1,
+                                 indic_2		     = indic_2,
+                                 alloc_pct           = 100,
+                                 plot                = False,
+                                 stop_loss_pct       = stop_loss_pct,
+                                 rsi_lower_threshold = rsi_lower_threshold,
+                                 rsi_upper_threshold = rsi_upper_threshold,
+                                 )
+        quote_profits_, _ = backtester.backtest()
+
+        return round(quote_profits_, 1)
+
+    def run_optuna_optimization(self):
+        # Create a study object and optimize the objective function.
+        study = optuna.create_study(study_name=self.strategy_name, direction='maximize')
+        study.optimize(self.objective, n_trials=100)
+        best_params = study.best_params
+        print(best_params)
+        # found_x = best_params["x"]
+        # print(f"Best quote_profit: {}, params: {best_params}")
+
+
 
 
 if __name__ == '__main__':
 
     """ Run a single backtest """
-    BackTesting(timeframe		  = '1h',
-                quote    		  = 'BTC',
-                pair      		  = 'ETHBTC',
-                strategy_name     = 'Crossover',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go
-                starting_balances = dict(quote=1, base=0),
-                indic_1			  = dict(indicator='ssf', length=5*24,  close='close'),		# Crossover	( best : 5*24, 40*24 )
-                indic_2			  = dict(indicator='ssf', length=40*24, close='close'),		    # Crossover
-                # indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
-                # indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
-                # indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
-                # indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
-                # indic_2			  = dict(indicator='bbands', length=80, close='spread'),	# Mean_Reversion_spread
-                alloc_pct         = 100,
-                plot              = True,
-                stop_loss_pct     = 2,
-                ).backtest()
+    # BackTesting(timeframe		  = '1h',
+    #             quote    		  = 'BTC',
+    #             pair      		  = 'ETHBTC',
+    #             strategy_name     = 'RSI',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go, RSI
+    #             starting_balances = dict(quote=1, base=0),
+    #             # indic_1			  = dict(indicator='ssf', length=5*24,  close='close'),		# Crossover	( best : 5*24, 40*24 )
+    #             # indic_2			  = dict(indicator='ssf', length=40*24, close='close'),		    # Crossover
+    #             indic_1			  = dict(indicator='rsi',    length=5*24, close='close'),		    # RSI
+    #             # indic_2			  = dict(indicator='bbands', length=40*24, close=f'rsi_{1*24}'),		    # RSI   5-55, 10-50
+    #             rsi_lower_threshold = 55,		                                                # RSI
+    #             rsi_upper_threshold = 55,		                                                # RSI
+    #             # indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
+    #             # indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
+    #             # indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
+    #             # indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
+    #             # indic_2			  = dict(indicator='bbands', length=80, close='spread'),	# Mean_Reversion_spread
+    #             alloc_pct         = 100,
+    #             plot              = True,
+    #             stop_loss_pct     = 4,    # 4
+    #             ).backtest()
 
 
-    # results                  = dict()
-    # results['length_fast']   = []
-    # results['length_slow']   = []
-    # results['stop_loss_pct'] = []
-    # results['quote_profits'] = []
-    #
-    # # Find the best lengths for this timeframe
-    # for length_fast_ in np.linspace(start=5, stop=20, num=4):
-    # 	for length_slow_ in np.linspace(start=30, stop=100, num=8):
-    # 		for stop_loss_pct_ in np.linspace(start=2, stop=5, num=4):
-    # 			quote_profits_, _ = backtester.backtest(quote   		  = 'BTC',
-    # 												    pair      		  = 'ETHBTC',
-    # 												    starting_balances = dict(quote=1, base=0),
-    # 												    indic			  = 'ssf',
-    # 												    length_fast       = int(length_fast_)*24,
-    # 												    length_slow       = int(length_slow_)*24,
-    # 												    alloc_pct         = 100,
-    # 												    plot              = False,
-    # 											   	    stop_loss_pct     = stop_loss_pct_,
-    # 											    	)
-    #
-    # 			print(f'length_fast, length_slow, stop_loss_pct = {length_fast_}, {length_slow_}, {stop_loss_pct_}')
-    # 			print(f'BTC profits on BTC = {round(quote_profits_, 2)}%')
-    # 			print('________________________')
-    #
-    # 			results['length_fast'].append(length_fast_)
-    # 			results['length_slow'].append(length_slow_)
-    # 			results['stop_loss_pct'].append(stop_loss_pct_)
-    # 			results['quote_profits'].append(quote_profits_)
-    #
-    #
-    # # ______________________________________________
-    # # Plot the results of the grid search
-    # df_ = pd.DataFrame({'length_fast'   : results['length_fast'],
-    # 				    'length_slow'   : results['length_slow'],
-    # 				    'stop_loss_pct' : results['stop_loss_pct'],
-    # 				    'quote_profits' : results['quote_profits']})
-    #
-    # import plotly.graph_objs as go
-    # fig = go.Figure()
-    # fig.add_trace(go.Scatter3d(x=df_.loc[:,'length_fast'], y=df_.loc[:,'length_slow'], z=df_.loc[:,'stop_loss_pct'],
-    # 						   mode='markers',
-    # 						   marker=dict(
-    # 									size       = 5,
-    # 									color      = df_.loc[:,'quote_profits'],      	# set color to an array/list of desired values
-    # 									colorscale = 'Viridis',                   		# choose a colorscale
-    # 									opacity    = 0.8,
-    # 									colorbar   = dict(thickness = 20,
-    # 													  title     = "BTC profits %"),
-    # 									)
-    # 						   )
-    # 			  )
-    # fig.update_layout(scene = dict(
-    # 							   xaxis_title='Length fast * 24',
-    # 							   yaxis_title='Length slow * 24',
-    # 							   zaxis_title='stop_loss_pct',
-    # 							   ),
-    # 				  title = "ETHBTC Simple Crossover - 1h - Sharpe ratio",
-    # 				  )
-    # fig.show()
-
-    """ Run a grid search """
-    # MpGridSearch(timeframe     = '1m',
+    # """ Run a grid search """
+    # MpGridSearch(timeframe     = '1h',
     # 			 pair          = 'ETHBTC',
-    # 			 strategy_name = 'Crossover',									# Crossover, Mean_Reversion_simple, MA_slope
+    # 			 strategy_name = 'RSI',			        # Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go, RSI
     # 			 ).run_grid_search()
+
+    """ Run an Optuna Optimization """
+    OptunaOptimization(timeframe     = '1h',
+                       pair          = 'ETHBTC',
+                       strategy_name = 'RSI',		    # Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go, RSI
+                       ).run_optuna_optimization()

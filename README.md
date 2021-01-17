@@ -20,6 +20,8 @@ This personal project implements the necessary functionalities to engage in 24/7
 - [x] **Speed**: Multiprocessing is implemented across the algo to speed it up.
 
 **New** : run `/experimentations/live_orderbook.py` to display the orderbook in real time via Binance's websocket, along with the evolution of imbalance value and the price.
+**New** : In `backtesting/backtesting.py`, implemented an Optuna optimization to search for the best parameters combination for your strategy.
+
 
 ## Basic Usage
 
@@ -34,6 +36,11 @@ Connection to Telegram (optional):
 
 Trading can be entirely managed from `Trading.py`.
 Additionally, run `Dashboard.py` to display a live dashboard (GUI) to get performance metrics, and `Telegram_interface.py` to get a Telegram interface.
+
+Backtest a strategy using one of the pre-filled templates in `backtesting/backtesting.py`.
+
+Example of output of the backtesting script :
+![image_telegram](strategy_output_example.jpg)
 
 
 ### Structure
@@ -52,13 +59,14 @@ The code is organized as follows :
 
 ## In Progress
 
-- In `backtesting/backtesting.py` : Replacing the GridSearch by an Optuna optimization
+- Investigating minute timeframe strategies
 
 
 ## To-Do
 
+The project is still in development phase and the code evolves rapidly. 
 - Create a simple GUI for `Trading.py`
-- Investigate minute timeframe strategies
+- Create a GUI for `backtesting.py`
 - Investigate orderbook imbalance strategies
 
 

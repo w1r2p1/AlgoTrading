@@ -23,7 +23,7 @@ This personal project implements the necessary functionalities to engage in 24/7
 **New** : In `backtesting/backtesting.py`, implemented an Optuna optimization to search for the best parameters combination for your strategy.
 
 
-## Basic Usage
+## Trading
 
 Connection to Binance :
 - [Create an API key](https://www.binance.com/fr/support/faq/360002502072) in your Binance user profile;
@@ -37,9 +37,13 @@ Connection to Telegram (optional):
 Trading can be entirely managed from `Trading.py`.
 Additionally, run `Dashboard.py` to display a live dashboard (GUI) to get performance metrics, and `Telegram_interface.py` to get a Telegram interface.
 
+
+## Backtesting
+
 Backtest a strategy using one of the pre-filled templates in `backtesting/backtesting.py`.
 
-Example of output of the backtesting script :
+Example output of the backtesting script, simulating a strategy on the ETHBTC pair on the 1h timeframe:
+
 ![image_telegram](strategy_output_example.jpg)
 
 

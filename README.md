@@ -47,7 +47,7 @@ Example output of the backtesting script, simulating a strategy on the ETHBTC pa
 ![image_telegram](strategy_output_example.jpg)
 
 
-### Structure
+## Structure
 
 The code is organized as follows :
 - `Trading.py`: Manages the 24/7 trading process.

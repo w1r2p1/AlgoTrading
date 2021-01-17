@@ -20,6 +20,7 @@ This personal project implements the necessary functionalities to engage in 24/7
 - [x] **Speed**: Multiprocessing is implemented across the algo to speed it up.
 
 **New** : run `/experimentations/live_orderbook.py` to display the orderbook in real time via Binance's websocket, along with the evolution of imbalance value and the price.
+
 **New** : In `backtesting/backtesting.py`, implemented an Optuna optimization to search for the best parameters combination for your strategy.
 
 
@@ -42,9 +43,14 @@ Additionally, run `Dashboard.py` to display a live dashboard (GUI) to get perfor
 
 Backtest a strategy using one of the pre-filled templates in `backtesting/backtesting.py`.
 
-Example output of the backtesting script, simulating a strategy on the ETHBTC pair on the 1h timeframe:
+Example output of the backtesting script, simulating a strategy on the ETHBTC pair on the 1h timeframe, using a 3% stop-loss:
 
 ![image_telegram](strategy_output_example.jpg)
+
+`BTC profits = 402.4%`
+`Winning trades : 86 (63%)`
+`Losing trades  : 50 (36%)`
+`Max drawdown : -11.3%`
 
 
 ## Structure

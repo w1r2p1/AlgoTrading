@@ -47,6 +47,7 @@ class BackTesting:
         self.stop_loss_pct 		= stop_loss_pct
         self.plot 				= plot
         self.quote_profits      = 0
+        self.base_profits       = 0
         self.buy_hold           = 0
         self.trailing_stop      = Decimal(0)
         self.display_progress_bar = kwargs.get('display_progress_bar', True)
@@ -365,12 +366,14 @@ class BackTesting:
             base_balance_finale    = self.df.loc[:, 'base_balance'].dropna().iloc[-1]
             quote_balance_initiale = self.df.loc[:, 'quote_balance'].dropna().iloc[0]
             quote_balance_finale   = self.df.loc[:, 'quote_balance'].dropna().iloc[-1]
-            price_base_at_first_quotevalue = self.df.loc[self.df['base_balance'] == base_balance_initiale, 'close_h'].iloc[0]
-            price_base_at_last_quotevalue  = self.df.loc[self.df['base_balance'] == base_balance_finale,   'close_h'].iloc[-1]
-            self.quote_profits = (Decimal(quote_balance_finale) / quote_balance_initiale - 1)*100
-            self.buy_hold      = (price_base_at_last_quotevalue / price_base_at_first_quotevalue - 1)*100
+            price_base_at_first_basebalance = self.df.loc[self.df['base_balance'] == base_balance_initiale, 'close_h'].iloc[0]
+            price_base_at_last_basebalance  = self.df.loc[self.df['base_balance'] == base_balance_finale,   'close_h'].iloc[-1]
+            self.quote_profits = (quote_balance_finale / quote_balance_initiale - 1)*100
+            # self.base_profits  = (base_balance_finale / base_balance_initiale - 1)*100
+            self.buy_hold      = (price_base_at_last_basebalance / price_base_at_first_basebalance - 1)*100
 
-            print(f'{self.quote} profits of {pair} = {round(self.quote_profits, 1)}%  (buy & hold = {round(self.buy_hold, 1)}%)')
+            print(f'{self.quote} profits = {round(self.quote_profits, 1)}%')
+            # print(f'{self.base} profits = {round(self.base_profits,  1)}%  (buy & hold = {round(self.buy_hold, 1)}%)')
             print(f'Winning trades : {trades["nb_win_trades"]} ({int(trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"])*100)}%)')
             print(f'Losing trades  : {trades["nb_los_trades"]} ({int((1-trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"]))*100)}%)')
 

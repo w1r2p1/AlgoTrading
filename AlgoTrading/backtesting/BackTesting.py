@@ -15,7 +15,10 @@ from   multiprocessing.pool import ThreadPool as Pool
 import time
 import plotly.graph_objs as go
 from plotly.offline import plot
+from plotly.subplots import make_subplots
 import optuna
+import sys
+import re
 
 
 class BackTesting:
@@ -37,6 +40,7 @@ class BackTesting:
         self.timeframe 			= timeframe
         self.quote 				= quote
         self.pair 				= pair
+        self.base 				= pair.replace(quote, '')
         self.strategy_name		= strategy_name
         self.starting_balances 	= starting_balances
         self.alloc_pct 			= alloc_pct
@@ -44,6 +48,9 @@ class BackTesting:
         self.plot 				= plot
         self.quote_profits      = 0
         self.buy_hold           = 0
+        self.trailing_stop      = Decimal(0)
+        self.display_progress_bar = kwargs.get('display_progress_bar', True)
+        # self.optimize_at_each_candle = kwargs.get('optimize_at_each_candle', {})
 
         # Create a dictionnary that
         self.indicators_dict = {}
@@ -72,12 +79,8 @@ class BackTesting:
     def prepare_df(self):
 
         # Get the dataframes from the csv files, keep only specific columns
-        if self.strategy_name == 'Gap_and_go':
-            df_hrs_ = pd.read_csv(f'../historical_data/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}', sep='\t').loc[:,['time', 'open', 'high', 'low', 'close']]
-            df_hrs_.columns = ['time', 'open_h', 'high_h', 'low_h', 'close_h']
-        else:
-            df_hrs_ = pd.read_csv(f'../historical_data/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}', sep='\t').loc[:,['time', 'close']]
-            df_hrs_.columns = ['time', 'close_h']
+        df_hrs_ = pd.read_csv(f'../historical_data/{self.quote}/{self.timeframe}/{self.pair}_{self.timeframe}', sep='\t').loc[:,['time', 'open', 'high', 'low', 'close', 'volume']]
+        df_hrs_.columns = ['time', 'open_h', 'high_h', 'low_h', 'close_h', 'volume_h']
         df_min_ = pd.read_csv(f'../historical_data/{self.quote}/1m/{self.pair}_1m', sep='\t').loc[:,['time', 'close']]
         # Rename the close columns to the pair's name
         df_min_.columns = ['time', 'close_m']
@@ -108,13 +111,7 @@ class BackTesting:
         # To simplify the code, shift the next minute data 1 place backwards so that the indice of the next minute candle matches the hours' one that gives the signal.
         # self.df.loc[:,'close_m'] = self.df.loc[:,'close_m'].shift(-1)
 
-        min_ = int(len(self.df.index)*0)
-        max_ = int(len(self.df.index)*1)
-        self.df = self.df.iloc[min_:max_]
-
         # Drop all the non-necessary minute data : since we shifted, drop averythime at non hours indexes, where hours data is at NaN
-
-        # print(self.df)
         # print('Data is ready.')
         self.df.dropna(inplace=True)
 
@@ -132,6 +129,32 @@ class BackTesting:
 
             close = self.df.loc[:,'close_h'] if indic_close_col=='close' else indic_close_col
             getattr(self.df.ta, indic)(close=close, length=indic_length, append=True, col_names=indic_name)
+
+
+    def update_best_parameters(self, start_index:int, end_index:int, n_trials:int):
+        """ Runs an Optuna optimzation to find the best parameters over a specified period. """
+
+        best_parameters_dict, best_value = OptunaOptimization(timeframe     = self.timeframe,
+                                                              pair          = self.pair,
+                                                              strategy_name = self.strategy_name,
+                                                              readjust_best_parameters = False,
+                                                              start_index   = start_index,
+                                                              end_index     = end_index,
+                                                              ).run_optuna_optimization(n_trials=n_trials, show_progress_bar=False)             # best_parameters = {'length_1': 8, 'stop_loss_pct': 3, 'rsi_lower_threshold': 49}
+
+        # Update the parameters only if the best trial is > 0
+        if best_value > 0:
+            best_parameters = list(best_parameters_dict.items())                                        # Transform the dict in a list of tuples : [(key, value), ...]
+
+            # Modify the values of the dict storing the indicators
+            for key, indic_dict in self.indicators_dict.items():
+                old_indic_name = indic_dict['indic_name']
+                new_indic_length = best_parameters[int(key)][1]
+                self.indicators_dict[key]['indic_name'] = f"{indic_dict['indic']}_{new_indic_length}"
+                self.indicators_dict[key]['indic_length'] = new_indic_length
+                self.df.drop(columns=[old_indic_name])
+
+        self.compute_indicators()
 
 
     def find_signal(self, i:int)->str:
@@ -191,21 +214,39 @@ class BackTesting:
         return signal
 
 
-    def backtest(self):
+    def backtest(self, **kwargs):
+        """ Iterates over a specified period to simulate a strategy and computes the outcome.
+            Looks for buy/sell signals and places market orders at the triggers.
+            To simulate the spread, the order price is the price at the close of the current candle, and the executed price is the close of the candle one minute after the trigger.
+            stop loss and trailing stop loss are implemented.
+            """
 
         # For code readability
         pair 				= self.pair
         starting_balances 	= self.starting_balances
         alloc_pct 			= self.alloc_pct
-        stop_loss_pct 		= self.stop_loss_pct
         bot                 = {}
         try:
             bot = dict(self.database.get_bot(pair=pair))
         except Exception as e:
-            print(f"Please create the {pair} bot in the database before backtesting.")
+            sys.exit(f"Please create the {pair} bot in the database before backtesting.")
+
+        parsed_timeframe = re.findall(r'[A-Za-z]+|\d+', self.timeframe)      # Separates '30m' in ['30', 'm']
+        period = 'last_day' if parsed_timeframe[1]=='m' else 'last_week'
+        # candles_for_period = int(60*24/int(parsed_timeframe[0])) if period=='last_day' else int(7*24/int(parsed_timeframe[0])) if period=='last_week' else 1000
+        candles_for_period = 200
 
         # Get the df from the file and prepare it
         self.prepare_df()
+
+        # Limit its size if need be
+        min_pct = 0.5 if parsed_timeframe[1]=='m' else 0
+        max_pct = 0.7 if parsed_timeframe[1]=='m' else 1
+        start_index = kwargs.get('start_index', int(len(self.df.index)*min_pct))
+        end_index   = kwargs.get('end_index',   int(len(self.df.index)*max_pct))
+        self.df = self.df.iloc[start_index:end_index]
+
+        readjust_best_parameters = kwargs.get('readjust_best_parameters', False)
 
         # Compute the indicators
         self.compute_indicators()
@@ -220,28 +261,29 @@ class BackTesting:
         # Initialize variables
         trades = dict(nb_trades     = 0,
                       nb_win_trades = 0,
-                      nb_los_trades = 0,
-                      )
+                      nb_los_trades = 0,)
 
         # Go through all candlesticks
-        hourly_close = self.df.loc[:,'close_h']
-        # for i in tqdm(range(self.longest_length, len(hourly_close)-1)):      # tqdm : progress bar
-        for i in range(self.longest_length, len(hourly_close)-1):
+        start = self.longest_length+candles_for_period if readjust_best_parameters else self.longest_length
+        end   = len(self.df.loc[:,'close_h'])-1
+        data  = range(start, end)
+        data  = tqdm(data) if self.display_progress_bar else data      # tqdm : progress bar
+        # ____________________________________________________________________________________________________________________________________________________________
+        for i in data:
 
             # Look for a signal
             signal = self.find_signal(i=i)
 
             price_now = Decimal(self.df['close_h'].iloc[i])
-            # price_above_indic = self.df['close_h'].iloc[i] > self.df[indic_name].iloc[i]
-            # price_under_indic = self.df['close_h'].iloc[i] < self.df[indic_name].iloc[i]
+            price_shifted = Decimal(self.df['close_h'].iloc[i-1])
 
             if status=='just bought': 	# ____________________________________________________________________________________________________________________________
                 # Sell either by signal or stop-loss
                 price_at_buy = Decimal(self.df.loc[:, 'buyprice_'+pair].dropna().iloc[-1])
-                stop_loss_trigger = (price_now/price_at_buy-1)*100 < Decimal(-stop_loss_pct)
+                stop_loss_trigger = price_now < self.trailing_stop if kwargs.get('trailing_stop', False) else (price_now/price_at_buy-1)*100 < Decimal(-self.stop_loss_pct)
                 increased_more_than_fees = (price_now/price_at_buy-1)*100 > 1
 
-                # if (signal=='sell' and increased_more_than_fees and price_above_indic) or stop_loss_trigger:
+                # Sell the base balance
                 if (signal=='sell' and increased_more_than_fees) or stop_loss_trigger:
 
                     # To simulate the spread, we sell on the following minute candle.
@@ -270,39 +312,54 @@ class BackTesting:
 
                     self.df.loc[self.df.index[i], 'fees'] = fee_in_quote_sell
                     status = 'just sold'
+                    # if general_loop:
+                    #     print('sold')
 
-            elif signal=='buy' and status=='just sold': # and price_under_indic:	# _____________________________________________________________________________________
+                    # Look for the best parameters combination over the last week/day
+                    if readjust_best_parameters:
+                        self.update_best_parameters(start_index=i-(self.longest_length+candles_for_period), end_index=i, n_trials=20)
 
-                # To simulate the spread, we buy on the following minute candle (it has been shifted already, so it's on the same index).
-                price_base_this_minute = Decimal(self.df['close_h'].iloc[i])
-                price_base_next_minute = Decimal(self.df['close_m'].iloc[i+1])
-                self.df.loc[self.df.index[i], 'buyprice_'+pair] = price_base_next_minute
-                # self.df.loc[self.df.index[i], 'buy_on_rsi'] = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
-
-                base_quantity_to_buy   = self.helpers.RoundToValidQuantity(bot=bot, quantity=quote_balance/price_base_this_minute*alloc_pct/100)
-                quote_quantity_buy     = base_quantity_to_buy*price_base_next_minute
-                fee_in_base_buy        = base_quantity_to_buy*Decimal(0.075)/Decimal(100)
-                received_base_quantity = base_quantity_to_buy - fee_in_base_buy						# What we get in base from the buy
-
-                # Update the balances
-                base_balance  += received_base_quantity
-                quote_balance -= quote_quantity_buy
-
-                base_balance_previous = self.df.loc[:, 'base_balance'].dropna().iloc[-1]
-
-                # Count the (un)sucessfull trades
-                trades['nb_trades'] += 1
-                self.df.loc[self.df.index[i], 'base_balance'] = base_balance
-                if base_balance < base_balance_previous:
-                    trades["nb_los_trades"] += 1
+                # Adjust the trailing stop loss (needs to be activated) if the price has gone up
                 else:
-                    trades['nb_win_trades'] += 1
+                    trailing_stop = price_now*(1-Decimal(self.stop_loss_pct)/100)
+                    if price_now > price_shifted and trailing_stop > self.trailing_stop:
+                        self.trailing_stop = trailing_stop
 
-                self.df.loc[self.df.index[i], 'fees'] = fee_in_base_buy*price_base_next_minute
-                status = 'just bought'
+            elif status=='just sold': 	# ___________________________________________________________________________________________________________________________
+                if signal=='buy':
+                    # To simulate the spread, we buy on the following minute candle (it has been shifted already, so it's on the same index).
+                    price_base_next_minute = Decimal(self.df['close_m'].iloc[i+1])
+                    self.df.loc[self.df.index[i], 'buyprice_'+pair] = price_base_next_minute
+                    # self.df.loc[self.df.index[i], 'buy_on_rsi'] = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
+
+                    base_quantity_to_buy   = self.helpers.RoundToValidQuantity(bot=bot, quantity=quote_balance/price_now*alloc_pct/100)
+                    quote_quantity_buy     = base_quantity_to_buy*price_base_next_minute
+                    fee_in_base_buy        = base_quantity_to_buy*Decimal(0.075)/Decimal(100)
+                    received_base_quantity = base_quantity_to_buy - fee_in_base_buy						# What we get in base from the buy
+
+                    # Update the balances
+                    base_balance  += received_base_quantity
+                    quote_balance -= quote_quantity_buy
+
+                    base_balance_previous = self.df.loc[:, 'base_balance'].dropna().iloc[-1]
+
+                    # Count the (un)sucessfull trades
+                    trades['nb_trades'] += 1
+                    self.df.loc[self.df.index[i], 'base_balance'] = base_balance
+                    if base_balance < base_balance_previous:
+                        trades["nb_los_trades"] += 1
+                    else:
+                        trades['nb_win_trades'] += 1
+
+                    self.df.loc[self.df.index[i], 'fees'] = fee_in_base_buy*price_base_next_minute
+                    status = 'just bought'
+                    # if general_loop:
+                    #     print('bought')
+                    # Set the stop loss to : buy price - stop_loss_pct
+                    self.trailing_stop = price_base_next_minute*(1-Decimal(self.stop_loss_pct)/100)
 
 
-        if trades['nb_trades'] > 1:
+        if trades['nb_trades'] > 2:
             # Compute profits and compare to buy and hold
             base_balance_initiale  = self.df.loc[:, 'base_balance'].dropna().iloc[0]
             base_balance_finale    = self.df.loc[:, 'base_balance'].dropna().iloc[-1]
@@ -311,7 +368,7 @@ class BackTesting:
             price_base_at_first_quotevalue = self.df.loc[self.df['base_balance'] == base_balance_initiale, 'close_h'].iloc[0]
             price_base_at_last_quotevalue  = self.df.loc[self.df['base_balance'] == base_balance_finale,   'close_h'].iloc[-1]
             self.quote_profits = (Decimal(quote_balance_finale) / quote_balance_initiale - 1)*100
-            self.buy_hold     = (price_base_at_last_quotevalue / price_base_at_first_quotevalue - 1)*100
+            self.buy_hold      = (price_base_at_last_quotevalue / price_base_at_first_quotevalue - 1)*100
 
             print(f'{self.quote} profits of {pair} = {round(self.quote_profits, 1)}%  (buy & hold = {round(self.buy_hold, 1)}%)')
             print(f'Winning trades : {trades["nb_win_trades"]} ({int(trades["nb_win_trades"]/(trades["nb_win_trades"]+trades["nb_los_trades"])*100)}%)')
@@ -331,10 +388,11 @@ class BackTesting:
 
             if self.plot:
                 self.plot_backtest(trades=trades, metri=metric)
+                # self.plotbacktest_plotly(trades=trades, metri=metric)
 
             return self.quote_profits, metric
         else:
-            print("Strategy didn't buy or sell.")
+            # print("Strategy didn't buy or sell.")
             return 0, 0
 
 
@@ -350,107 +408,108 @@ class BackTesting:
         min_indice = -1000
         max_indice = None
 
-        if self.strategy_name == 'Gap_and_go':
-            fig = go.Figure(data=[go.Candlestick(x 	   = self.df.index[min_indice:max_indice],
-                                                 open  = self.df['open_h'].iloc[min_indice:max_indice],
-                                                 high  = self.df['high_h'].iloc[min_indice:max_indice],
-                                                 low   = self.df['low_h'].iloc[min_indice:max_indice],
-                                                 close = self.df['close_h'].iloc[min_indice:max_indice],),
-                                  go.Scatter(x=self.df.index[min_indice:max_indice],
-                                             y=self.df['buyprice_'+pair].iloc[min_indice:max_indice],
-                                             mode='markers',
-                                             marker=dict(color='orange'),
-                                             name='buys',),
-                                  go.Scatter(x=self.df.index[min_indice:max_indice],
-                                             y=self.df['sellprice_'+pair].iloc[min_indice:max_indice],
-                                             mode='markers',
-                                             marker=dict(color='black'),
-                                             name='sells',)
-                                  ])
-
-            # Set line and fill colors of candles
-            # IGNORE THE WARNING
-            cs = fig.data[0]
-            cs.increasing.fillcolor  = '#3D9970'    # '#008000'
-            cs.increasing.line.color = '#3D9970'    # '#008000'
-            cs.decreasing.fillcolor  = '#FF4136'    # '#800000'
-            cs.decreasing.line.color = '#FF4136'    # '#800000'
-
-            fig['layout'] = {
-                "margin"    : {"t": 30, "b": 20},
-                "title"     : f"{pair} - Gap and Go Strategy - {self.timeframe} - {quote} profits: {round(self.quote_profits,1)}% (buy & hold: {round(self.buy_hold,1)}%). Stoploss: {stoploss}%.",
-                "titlefont" : dict(size=18,color='#a3a7b0'),
-                # "height"    : 350,
-                "xaxis": {
-                    "fixedrange"    : False,
-                    "showline"      : True,
-                    "zeroline"      : False,
-                    "showgrid"      : False,
-                    "showticklabels": True,
-                    "rangeslider"   : {"visible": False},
-                    "color"         : "#a3a7b0"},
-                "yaxis": {
-                    "fixedrange"    : False,
-                    "showline"      : False,
-                    "zeroline"      : False,
-                    "showgrid"      : True,
-                    "showticklabels": True,
-                    "ticks"         : "",
-                    "color": "#a3a7b0"},
-                "plot_bgcolor" : "#23272c",
-                "paper_bgcolor": "#23272c"}
-
-            plot(fig)
-
-        elif self.strategy_name == 'RSI':
-            fig, (ax2, ax3) = plt.subplots(2, 1, figsize=(14,12))
-
-            # First plot - Price
-            ax2.plot(self.df.index[min_indice:max_indice], self.df.loc[:, 'close_h'][min_indice:max_indice], c='blue',  label=f"{pair} price", linestyle='-')
-            ax2.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}    -    Stop-loss={stoploss}%    -    Indicators : {[indic_dict["indic_name"] for indic_dict in self.indicators_dict.values()]}    -    alloc={alloc_pct}%    -    Trades : {trades["nb_trades"]}    -    Thresholds={self.rsi_lower_threshold, self.rsi_upper_threshold}\n\nQuantity of coins held')
-            # Add the buys and sells
-            ax2.scatter(self.df.index[min_indice:max_indice], self.df['buyprice_'+pair].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
-            ax2.scatter(self.df.index[min_indice:max_indice], self.df['sellprice_'+pair].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
-            ax2.legend(loc="upper left")
-            ax2.set_ylabel(f'{quote} balance')
-            ax2.tick_params(axis='y',  colors='blue')
-
-            # Second plot - RSI
-            ax3.plot(self.df.index[min_indice:max_indice], self.df[self.indicators_dict['1']['indic_name']].iloc[min_indice:max_indice], c='black',  label=f"RSI", linestyle='-')
-            # ax3.plot(self.df.index[min_indice:max_indice], self.df['bband_l'].iloc[min_indice:max_indice], c='blue',  label=f"bband_l", linestyle='-')
-            # ax3.plot(self.df.index[min_indice:max_indice], self.df['bband_u'].iloc[min_indice:max_indice], c='blue',  label=f"bband_u", linestyle='-')
-            # Add the buys and sells
-            # ax3.scatter(self.df.index[min_indice:max_indice], self.df['buy_on_rsi'].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
-            # ax3.scatter(self.df.index[min_indice:max_indice], self.df['sell_on_rsi'].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
-            ax3.set_title(f'RSI')
-            ax3.legend(loc="upper left")
-            ax3.set_ylabel(f'RSI value')
-            ax3.tick_params(axis='y',  colors='black')
-            ax3.axhline(50, color='blue',  linestyle='--')
-            # ax3.axhline(self.rsi_lower_threshold, color='black',  linestyle='--')
-            # ax3.axhline(self.rsi_upper_threshold, color='black',  linestyle='--')
-            plt.subplots_adjust(hspace=10)
-            plt.show()
-
-        else:
-            fig, ax1 = plt.subplots(figsize=(14,10))
-            # First plot
-            ax1.plot(self.df.index[min_indice:max_indice], self.df['close_h'].iloc[min_indice:max_indice], color='black',  label=f"{pair.replace(quote, '')} price in {quote}")
-            # Add the buys and sells
-            ax1.scatter(self.df.index[min_indice:max_indice], self.df['buyprice_'+pair].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
-            ax1.scatter(self.df.index[min_indice:max_indice], self.df['sellprice_'+pair].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
-            # Add the emas
-            for indic_dict in self.indicators_dict.values():
-                indic_name      = indic_dict['indic_name']
-                ax1.plot(self.df.index[min_indice:max_indice], self.df[indic_name].iloc[min_indice:max_indice],   label=indic_name)
-            # Legend and tites
-            ax1.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}\n\nPrices of {pair.replace(quote, "")} in {quote}')
-            ax1.legend(loc="upper left")
-            ax1.set_ylabel(f'Price of {pair.replace(quote, "")} in {quote}')
-            ax1.tick_params(axis='y',  colors='blue')
-            ax1.grid(linestyle='--', axis='y')
-            plt.show()
-
+        # if self.strategy_name == 'Gap_and_go':
+        #     fig = go.Figure(data=[go.Candlestick(x 	   = self.df.index[min_indice:max_indice],
+        #                                          open  = self.df['open_h'].iloc[min_indice:max_indice],
+        #                                          high  = self.df['high_h'].iloc[min_indice:max_indice],
+        #                                          low   = self.df['low_h'].iloc[min_indice:max_indice],
+        #                                          close = self.df['close_h'].iloc[min_indice:max_indice],),
+        #                           go.Scatter(x=self.df.index[min_indice:max_indice],
+        #                                      y=self.df['buyprice_'+pair].iloc[min_indice:max_indice],
+        #                                      mode='markers',
+        #                                      marker=dict(color='orange'),
+        #                                      name='buys',),
+        #                           go.Scatter(x=self.df.index[min_indice:max_indice],
+        #                                      y=self.df['sellprice_'+pair].iloc[min_indice:max_indice],
+        #                                      mode='markers',
+        #                                      marker=dict(color='black'),
+        #                                      name='sells',)
+        #                           ])
+        #
+        #     # Set line and fill colors of candles
+        #     # IGNORE THE WARNING
+        #     cs = fig.data[0]
+        #     cs.increasing.fillcolor  = '#3D9970'    # '#008000'
+        #     cs.increasing.line.color = '#3D9970'    # '#008000'
+        #     cs.decreasing.fillcolor  = '#FF4136'    # '#800000'
+        #     cs.decreasing.line.color = '#FF4136'    # '#800000'
+        #
+        #     fig['layout'] = {
+        #         "margin"    : {"t": 30, "b": 20},
+        #         "title"     : f"{pair} - Gap and Go Strategy - {self.timeframe} - {quote} profits: {round(self.quote_profits,1)}% (buy & hold: {round(self.buy_hold,1)}%). Stoploss: {stoploss}%.",
+        #         "titlefont" : dict(size=18,color='#a3a7b0'),
+        #         # "height"    : 350,
+        #         "xaxis": {
+        #             "fixedrange"    : False,
+        #             "showline"      : True,
+        #             "zeroline"      : False,
+        #             "showgrid"      : False,
+        #             "showticklabels": True,
+        #             "rangeslider"   : {"visible": False},
+        #             "color"         : "#a3a7b0"},
+        #         "yaxis": {
+        #             "fixedrange"    : False,
+        #             "showline"      : False,
+        #             "zeroline"      : False,
+        #             "showgrid"      : True,
+        #             "showticklabels": True,
+        #             "ticks"         : "",
+        #             "color": "#a3a7b0"},
+        #         "plot_bgcolor" : "#23272c",
+        #         "paper_bgcolor": "#23272c"}
+        #
+        #     plot(fig)
+        #
+        # elif self.strategy_name == 'RSI':
+        #     fig, (ax2, ax3) = plt.subplots(2, 1, figsize=(14,12))
+        #
+        #     # First plot - Price
+        #     ax2.plot(self.df.index[min_indice:max_indice], self.df.loc[:, 'close_h'][min_indice:max_indice], c='blue',  label=f"{pair} price", linestyle='-')
+        #     ax2.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}    -    Stop-loss={stoploss}%    -    Indicators : {[indic_dict["indic_name"] for indic_dict in self.indicators_dict.values()]}    -    alloc={alloc_pct}%    -    Trades : {trades["nb_trades"]}    -    Thresholds={self.rsi_lower_threshold, self.rsi_upper_threshold}\n\nQuantity of coins held')
+        #     # Add the buys and sells
+        #     ax2.scatter(self.df.index[min_indice:max_indice], self.df['buyprice_'+pair].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
+        #     ax2.scatter(self.df.index[min_indice:max_indice], self.df['sellprice_'+pair].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
+        #     ax2.legend(loc="upper left")
+        #     ax2.set_ylabel(f'{quote} balance')
+        #     ax2.tick_params(axis='y',  colors='blue')
+        #
+        #     # Second plot - RSI
+        #     ax3.plot(self.df.index[min_indice:max_indice], self.df[self.indicators_dict['1']['indic_name']].iloc[min_indice:max_indice], c='black',  label=f"RSI", linestyle='-')
+        #     # ax3.plot(self.df.index[min_indice:max_indice], self.df['bband_l'].iloc[min_indice:max_indice], c='blue',  label=f"bband_l", linestyle='-')
+        #     # ax3.plot(self.df.index[min_indice:max_indice], self.df['bband_u'].iloc[min_indice:max_indice], c='blue',  label=f"bband_u", linestyle='-')
+        #     # Add the buys and sells
+        #     # ax3.scatter(self.df.index[min_indice:max_indice], self.df['buy_on_rsi'].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
+        #     # ax3.scatter(self.df.index[min_indice:max_indice], self.df['sell_on_rsi'].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
+        #     ax3.set_title(f'RSI')
+        #     ax3.legend(loc="upper left")
+        #     ax3.set_ylabel(f'RSI value')
+        #     ax3.tick_params(axis='y',  colors='black')
+        #     ax3.axhline(50, color='blue',  linestyle='--')
+        #     # ax3.axhline(self.rsi_lower_threshold, color='black',  linestyle='--')
+        #     # ax3.axhline(self.rsi_upper_threshold, color='black',  linestyle='--')
+        #     plt.subplots_adjust(hspace=10)
+        #     plt.show()
+        #
+        # else:
+        #     fig, ax1 = plt.subplots(figsize=(14,10))
+        #     # First plot
+        #     ax1.plot(self.df.index[min_indice:max_indice], self.df['close_h'].iloc[min_indice:max_indice], color='black',  label=f"{pair.replace(quote, '')} price in {quote}")
+        #     # Add the buys and sells
+        #     ax1.scatter(self.df.index[min_indice:max_indice], self.df['buyprice_'+pair].iloc[min_indice:max_indice],  color='red',    marker='x', s=65, label='Buys')
+        #     ax1.scatter(self.df.index[min_indice:max_indice], self.df['sellprice_'+pair].iloc[min_indice:max_indice], color='green',  marker='x', s=65, label='Sells')
+        #     # Add the indics
+        #     for indic_dict in self.indicators_dict.values():
+        #         indic_name      = indic_dict['indic_name']
+        #         ax1.plot(self.df.index[min_indice:max_indice], self.df[indic_name].iloc[min_indice:max_indice],   label=indic_name)
+        #     # Legend and tites
+        #     ax1.set_title(f'{self.strategy_name} Strategy  -  {self.timeframe}\n\nPrices of {pair.replace(quote, "")} in {quote}')
+        #     ax1.legend(loc="upper left")
+        #     ax1.set_ylabel(f'Price of {pair.replace(quote, "")} in {quote}')
+        #     ax1.tick_params(axis='y',  colors='blue')
+        #     ax1.grid(linestyle='--', axis='y')
+        #     plt.show()
+        #
+        self.plot_price_and_indicators()
 
         # Strategy evolution ______________________________________________________________________________________________________________________
         fig, (ax2, ax3) = plt.subplots(2, 1, figsize=(14,12))
@@ -500,6 +559,105 @@ class BackTesting:
         return
 
 
+    def plot_price_and_indicators(self, **kwargs):
+
+        fig = make_subplots(rows  = 2,
+                            cols  = 1,
+                            specs = [[{"secondary_y": True}], [{"secondary_y": True}]])
+
+        # Candles
+        candle = go.Candlestick(x     = self.df.index,
+                                open  = self.df['open_h'],
+                                close = self.df['close_h'],
+                                high  = self.df['high_h'],
+                                low   = self.df['low_h'],
+                                name  = f'{self.base} price in {self.quote}')
+        # Set line and fill colors of candles
+        cs = candle
+        cs.increasing.fillcolor  = 'white'      # '#3D9970'    # '#008000'
+        cs.increasing.line.color = 'white'      # '#3D9970'    # '#008000'
+        cs.decreasing.fillcolor  = 'black'      # '#FF4136'    # '#800000'
+        cs.decreasing.line.color = 'black'      # '#FF4136'    # '#800000'
+        fig.add_trace(candle, row=1, col=1)
+
+        # Volume
+        volume = go.Bar(x     = self.df.index,
+                        y     = self.df['volume_h'],
+                        # xaxis ="x",
+                        # yaxis ="y2",
+                        # width = 400000,
+                        name  = "Volume",
+                        )
+        fig.add_trace(volume, row=1, col=1, secondary_y=True)
+
+        # Buys and sells
+        buys = go.Scatter(x      = self.df.index,
+                          y      = self.df['buyprice_'+self.pair],
+                          mode   = 'markers',
+                          marker = dict(color='red', size=10, symbol='x-dot'),
+                          name   = 'buys')
+        fig.add_trace(buys,  row=1, col=1)
+        sells = go.Scatter(x      = self.df.index,
+                           y      = self.df['sellprice_'+self.pair],
+                           mode   = 'markers',
+                           marker = dict(color='green', size=10, symbol='x-dot'),
+                           name   = 'sells')
+        fig.add_trace(sells, row=1, col=1)
+
+        # Add the indicators
+        for indic_dict in self.indicators_dict.values():
+            indic      = indic_dict['indic']
+            indic_name = indic_dict['indic_name']
+            ind = go.Scatter(x      = self.df.index,
+                             y      = self.df[indic_name],
+                             mode   = 'lines',
+                             name   = indic_name,)
+            fig.add_trace(ind, row=2 if 'rsi' in indic else 1, col=1)
+
+
+        fig.update_layout({
+            "title"     : f"{self.pair} - {self.strategy_name} Strategy - {self.timeframe} - {self.quote} profits: {round(self.quote_profits,1)}% (buy & hold: {round(self.buy_hold,1)}%). Stoploss: {self.stop_loss_pct}%.",
+            "margin": {"t": 30, "b": 20},
+            # "height": 800,
+            "xaxis" : {
+                "fixedrange"    : False,
+                "showline"      : False,
+                "zeroline"      : False,
+                "showgrid"      : False,
+                "showticklabels": True,
+                "rangeslider"   : {"visible": False},
+                "color"         : "#a3a7b0",
+            },
+            "yaxis" : {
+                "fixedrange"    : False,
+                "showline"      : False,
+                "zeroline"      : False,
+                "showgrid"      : False,
+                "showticklabels": True,
+                "ticks"         : "",
+                "color"         : "#a3a7b0",
+            },
+            "yaxis2" : {
+                "fixedrange"    : False,
+                "showline"      : False,
+                "zeroline"      : False,
+                "showgrid"      : False,
+                "showticklabels": True,
+                "ticks"         : "",
+                # "color"        : "#a3a7b0",
+                "range"         : [0, self.df['volume_h'].max() * 10],
+            },
+            "legend" : {
+                "font"          : dict(size=15, color="#a3a7b0"),
+            },
+            "plot_bgcolor"  : "#23272c",
+            "paper_bgcolor" : "#23272c",
+
+        })
+        plot(fig)
+
+
+    """ Helper methods """
     def find_high_of_last_red_candle(self, start_at:int):
         """ Returns the high of the last red candle.
             Used in the Gap and Go strategy."""
@@ -606,6 +764,7 @@ class MpGridSearch:
                                  stop_loss_pct     = int(params[-1]),
                                  rsi_lower_threshold = rsi_lower_threshold,
                                  rsi_upper_threshold = rsi_upper_threshold,
+                                 display_progress_bar = False,
                                  )
         quote_profits_, _ = backtester.backtest()
 
@@ -756,72 +915,36 @@ class MpGridSearch:
 
 class OptunaOptimization:
 
-    def __init__(self, timeframe:str, pair:str, strategy_name:str):
+    def __init__(self, timeframe:str, pair:str, strategy_name:str, **kwargs):
         self.timeframe = timeframe
         self.pair = pair
         self.strategy_name = strategy_name
-        # self.results                        = dict()
-        # self.results['length_fast']         = []
-        # self.results['length_slow']         = []
-        # self.results['length']   	        = []
-        # self.results['length_slope']        = []
-        # self.results['length_bbands']       = []
-        # self.results['rsi_lower_threshold'] = []
-        # self.results['rsi_upper_threshold'] = []
-        # self.results['stop_loss_pct']       = []
-        # self.results['quote_profits']       = []
-
-        # if strategy_name=='Crossover':
-        #     self.fast          = np.linspace(start=2,  stop=10,  num=5)
-        #     self.slow          = np.linspace(start=20, stop=40, num=3)
-        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
-        #     self.paramlist = list(itertools.product(self.fast, self.slow, self.stop_loss_pct))
-        # if strategy_name=='MA_slope':
-        #     self.indic         = np.linspace(start=5,  stop=20,  num=4)
-        #     self.slope         = np.linspace(start=30, stop=100, num=8)
-        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
-        #     self.paramlist = list(itertools.product(self.indic, self.slope, self.stop_loss_pct))
-        # if strategy_name=='Mean_Reversion_simple':
-        #     self.indic         = np.linspace(start=5,  stop=20,  num=4)
-        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
-        #     self.paramlist = list(itertools.product(self.indic, self.stop_loss_pct))
-        # if strategy_name=='Mean_Reversion_spread':
-        #     self.indic         = np.linspace(start=5,  stop=20,  num=4)
-        #     self.bbands_length = np.linspace(start=5,  stop=20,  num=4)
-        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
-        #     self.paramlist = list(itertools.product(self.indic, self.bbands_length, self.stop_loss_pct))
-        # if strategy_name=='RSI':
-        #     # self.indic         = np.linspace(start=5,  stop=20,  num=7)
-        #     self.indic         = [1, 3, 5, 7, 9, 11, 13]
-        #     self.rsi_lower_threshold = np.linspace(start=40,  stop=80,  num=9)
-        #     # self.rsi_upper_threshold = np.linspace(start=40,  stop=80,   num=9)
-        #     # self.paramlist = list(itertools.product(self.indic, self.rsi_lower_threshold, self.rsi_upper_threshold))
-        #     self.stop_loss_pct = np.linspace(start=2,  stop=5,   num=4)
-        #     self.paramlist = list(itertools.product(self.indic, self.rsi_lower_threshold, self.stop_loss_pct))
+        self.kwargs = kwargs
 
     def objective(self, trial):
         """ Function to be maximized """
 
-        length_1 = trial.suggest_int('length_1', 5, 20)
-        # length_2 = trial.suggest_int('length_2', 5, 20)
-        stop_loss_pct = trial.suggest_int('stop_loss_pct', 1, 5)
+        length_1 = trial.suggest_int('length_1', 5, 200)
+        # length_2 = trial.suggest_int('length_2', 30, 60)
 
         indic_2 = {}
         rsi_lower_threshold = None
         rsi_upper_threshold = None
-        length_2 = None
+        length_2 = 0
 
         # Suggest values of the hyperparameters using a trial object.
-        indic_1 = dict(indicator='ssf' if self.strategy_name!='RSI' else 'rsi',    length=length_1*24, close='close')
+        indic_1 = dict(indicator='ssf' if self.strategy_name!='RSI' else 'rsi', length=length_1, close='close')
         if self.strategy_name=='Crossover':
-            indic_2 = dict(indicator='ssf',    length=length_2, close='close')
+            indic_2 = dict(indicator='ssf',    length=length_2*24, close='close')
         elif self.strategy_name=='MA_slope':
-            indic_2 = dict(indicator='slope',  length=length_2, close=f'ssf_{length_1}')
+            indic_2 = dict(indicator='slope',  length=length_2*24, close=f'ssf_{length_1}')
         elif self.strategy_name=='Mean_Reversion_spread':
-            indic_2	= dict(indicator='bbands', length=length_2, close='spread')
+            indic_2	= dict(indicator='bbands', length=length_2*24, close='spread')
         elif self.strategy_name=='RSI':
-            rsi_lower_threshold = trial.suggest_int('rsi_lower_threshold', 30, 70)
+            rsi_lower_threshold = trial.suggest_int('rsi_lower_threshold', 50, 70)
             # rsi_upper_threshold = trial.suggest_int('rsi_upper_threshold', 55, 70)
+
+        stop_loss_pct = trial.suggest_int('stop_loss_pct', 1, 4)
 
         backtester = BackTesting(self.timeframe,
                                  quote   		     = 'BTC',
@@ -835,56 +958,69 @@ class OptunaOptimization:
                                  stop_loss_pct       = stop_loss_pct,
                                  rsi_lower_threshold = rsi_lower_threshold,
                                  rsi_upper_threshold = rsi_upper_threshold,
+                                 display_progress_bar = False,
                                  )
-        quote_profits_, _ = backtester.backtest()
+        quote_profits_, _ = backtester.backtest(**self.kwargs)
 
         return round(quote_profits_, 1)
 
-    def run_optuna_optimization(self):
+    def run_optuna_optimization(self, n_trials:int, show_progress_bar:bool):
         # Create a study object and optimize the objective function.
         study = optuna.create_study(study_name=self.strategy_name, direction='maximize')
-        study.optimize(self.objective, n_trials=100)
+        study.optimize(self.objective, n_trials=n_trials, show_progress_bar=show_progress_bar)
         best_params = study.best_params
-        print(best_params)
-        # found_x = best_params["x"]
-        # print(f"Best quote_profit: {}, params: {best_params}")
+        best_value  = study.best_value
+        print(f"\nBest parameters: {best_params}")
+        # plot(optuna.visualization.plot_optimization_history(study))
+        # plot(optuna.visualization.plot_param_importances(study))
 
+        return best_params, best_value
 
 
 
 if __name__ == '__main__':
 
     """ Run a single backtest """
-    # BackTesting(timeframe		  = '1h',
-    #             quote    		  = 'BTC',
-    #             pair      		  = 'ETHBTC',
-    #             strategy_name     = 'RSI',									# Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go, RSI
-    #             starting_balances = dict(quote=1, base=0),
-    #             # indic_1			  = dict(indicator='ssf', length=5*24,  close='close'),		# Crossover	( best : 5*24, 40*24 )
-    #             # indic_2			  = dict(indicator='ssf', length=40*24, close='close'),		    # Crossover
-    #             indic_1			  = dict(indicator='rsi',    length=5*24, close='close'),		    # RSI
-    #             # indic_2			  = dict(indicator='bbands', length=40*24, close=f'rsi_{1*24}'),		    # RSI   5-55, 10-50
-    #             rsi_lower_threshold = 55,		                                                # RSI
-    #             rsi_upper_threshold = 55,		                                                # RSI
-    #             # indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope
-    #             # indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
-    #             # indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
-    #             # indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
-    #             # indic_2			  = dict(indicator='bbands', length=80, close='spread'),	# Mean_Reversion_spread
-    #             alloc_pct         = 100,
-    #             plot              = True,
-    #             stop_loss_pct     = 4,    # 4
-    #             ).backtest()
+    BackTesting(timeframe		  = '1h',
+                quote    		  = 'BTC',
+                pair      		  = 'ETHBTC',
+                strategy_name     = 'RSI',									            # Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go,
+                starting_balances = dict(quote=1, base=0),
+                # indic_1			  = dict(indicator='ssf', length=14*24, close='close'),		    # Crossover	( best : 5*24, 40*24 )
+                # indic_2			  = dict(indicator='ssf', length=31*24, close='close'),		    # Crossover
+                indic_1			  = dict(indicator='rsi',    length=7*24, close='close'),		    # RSI
+                # indic_2			  = dict(indicator='bbands', length=40*24, close=f'rsi_{1*24}'),		    # RSI   5-55, 10-50
+                rsi_lower_threshold = 53,		                                                # RSI
+                rsi_upper_threshold = 53,		                                                # RSI
+                # indic_1			  = dict(indicator='ssf',   length=100, close='close'),		# MA_slope<
+                # indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	# MA_slope
+                # indic_1			  = dict(indicator='ssf', length=500,  close='close'),		# Mean_Reversion_simple
+                # indic_1			  = dict(indicator='ssf',    length=80, close='close'),		# Mean_Reversion_spread
+                # indic_2			  = dict(indicator='bbands', length=80, close='spread'),	# Mean_Reversion_spread
+                alloc_pct         = 100,
+                plot              = True,
+                stop_loss_pct     = 3,    # 3
+                display_progress_bar = True,
+                ).backtest(readjust_best_parameters=False)
 
 
-    # """ Run a grid search """
+    # Crossover
+    # {'length_1': 15, 'length_2': 30, 'stop_loss_pct': 2}. Best is trial 52 with value: 226.1.
+    # {'length_1': 14, 'length_2': 31, 'stop_loss_pct': 2}. Best is trial 62 with value: 238.8.
+    # RSI :
+    # {'length_1': 6, 'stop_loss_pct': 3, 'rsi_lower_threshold': 50}. Best is trial 68 with value: 344.0
+    # {'length_1': 5, 'stop_loss_pct': 3, 'rsi_lower_threshold': 55}. Best is trial 76 with value: 368.1
+    # {'length_1': 6, 'stop_loss_pct': 3, 'rsi_lower_threshold': 53}. Best is trial 85 with value: 380.1
+    # {'length_1': 7, 'stop_loss_pct': 3, 'rsi_lower_threshold': 53}. Best is trial 39 with value: 402.4
+
+    """ Run a grid search """
     # MpGridSearch(timeframe     = '1h',
     # 			 pair          = 'ETHBTC',
-    # 			 strategy_name = 'RSI',			        # Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go, RSI
+    # 			 strategy_name = 'RSI',
     # 			 ).run_grid_search()
 
     """ Run an Optuna Optimization """
-    OptunaOptimization(timeframe     = '1h',
-                       pair          = 'ETHBTC',
-                       strategy_name = 'RSI',		    # Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go, RSI
-                       ).run_optuna_optimization()
+    # OptunaOptimization(timeframe     = '5m',
+    #                    pair          = 'ETHBTC',
+    #                    strategy_name = 'RSI',
+    #                    ).run_optuna_optimization(n_trials=80, show_progress_bar=True)

@@ -5,6 +5,7 @@ This personal project implements the necessary functionalities to engage in 24/7
 
 ![image_telegram](image_readme.jpg)
 
+
 ## Features
 
 - [x] **Written in Python 3.8+**
@@ -14,14 +15,12 @@ This personal project implements the necessary functionalities to engage in 24/7
 - [x] **Timeframes**: Trade on timeframes from one minute to daily data.
 - [x] **Backtesting**: Run a simulation of a buy/sell strategy on a specific pair and plot the results.
 - [x] **Strategy templates**: The project comes with build-in strategies that the user can fine-tune.
-- [x] **Strategy Optimization by GridSearch**: Use a GridSearch to optimize the buy/sell strategy parameters.
+- [x] **Strategy Optimization**: Use an Optuna optimization to search for the best parameters combination for your strategy.
 - [x] **Dashboard GUI**: Monitor the performances of the bot through an elegant Dash GUI.
 - [x] **Telegram Interface**: Provide a performance status of your current trades.
 - [x] **Speed**: Multiprocessing is implemented across the algo to speed it up.
 
 **New** : run `/experimentations/live_orderbook.py` to display the orderbook in real time via Binance's websocket, along with the evolution of imbalance value and the price.
-
-**New** : In `backtesting/backtesting.py`, implemented an Optuna optimization to search for the best parameters combination for your strategy.
 
 
 ## Trading
@@ -75,6 +74,7 @@ The code is organized as follows :
 ## To-Do
 
 The project is still in development phase and the code evolves rapidly. 
+- Handle the event when the user withdraws or deposits a quote while the bot is running
 - Create a simple GUI for `Trading.py`
 - Create a GUI for `backtesting.py`
 - Investigate orderbook imbalance strategies

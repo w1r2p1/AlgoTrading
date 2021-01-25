@@ -24,14 +24,14 @@ class Histories:
         pairs = self.exchange.GetNameOfPairs_WithQuoteasset(self.existing_quoteassets)                                    # {'ETH': ['QTUMETH', 'EOSETH',..], 'BTC':[]}
 
         # for quote in pairs.keys():
-        for quote in ['BTC']:
+        for quote in ['ETH']:
             # In the project directory, create a nested directory for the quoteasset if not exists
             Path(f'historical_data/{quote}/{self.timeframe}').mkdir(parents=True, exist_ok=True)
 
             # self.GetAndStore_HistoricalPrices(quote = quote, pair='ETHBTC')
 
             # for counter, pair in enumerate(pairs[quote]):
-            for counter, pair in enumerate(['ADABTC']):
+            for counter, pair in enumerate(['LTCETH', 'ADAETH']):
                 # for counter, pair in tqdm(enumerate(["XRPBTC", "ETHBTC"])):
                 print(f"\nGETTING DATA FOR {pair}. {counter} out of {len(pairs[quote])}.")
                 self.GetAndStore_HistoricalPrices(quote=quote, pair=pair)

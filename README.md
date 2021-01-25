@@ -73,7 +73,7 @@ The code is organized as follows :
 
 ## To-Do
 
-The project is still in development phase and the code evolves rapidly. 
+The project is still in its development phase and the code evolves rapidly. 
 - Handle the event when the user withdraws or deposits a quote while the bot is running
 - Create a simple GUI for `Trading.py`
 - Create a GUI for `backtesting.py`

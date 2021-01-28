@@ -21,7 +21,7 @@ import random
 import time
 from freezegun import freeze_time
 from tqdm import tqdm
-
+from tabulate import tabulate
 
 # ------------------------------------------
 # # Clear file database.db
@@ -34,14 +34,12 @@ class Strategy:
     def __init__(self, name:str):
         self.name = name
 
-    @staticmethod
-    def find_signal(df)->str:
+    def find_signal(self, df)->str:
         """ Compute the indicators and look for a signal.
             Each strategy is only a template that needs to be fine tuned.
         """
-        strategy_ = 'Crossover'
 
-        if strategy_=='Crossover':
+        if 'crossover' in self.name.lower():
             indic = 'ssf'
             fast_length = 40*24
             slow_length = 5*24
@@ -67,16 +65,14 @@ class Trading:
 
     def __init__(self,
                  paper_trading:bool,
-                 timeframe:str,
-                 quotes_to_trade_on:list,
-                 bots_per_quote:int,
-                 send_to_telegram:bool=False):
+                 **kwargs):
 
         self.paper_trading      = paper_trading
-        self.timeframe          = timeframe
-        self.quotes_to_trade_on = quotes_to_trade_on
-        self.bots_per_quote     = bots_per_quote
-        self.send_to_telegram   = send_to_telegram
+        self.timeframe          = kwargs.get('timeframe', '1h')
+        self.quotes_to_trade_on = kwargs.get('quotes_to_trade_on', None)
+        self.bots_per_quote     = kwargs.get('bots_per_quote', 5)
+        self.pairs_to_trade_on  = kwargs.get('pairs_to_trade_on', None)
+        self.send_to_telegram   = kwargs.get('send_to_telegram', False)
 
         self.exchange = Binance(filename='assets/credentials.txt')
         self.database = BotDatabase(name="assets/database_paper.db") if self.paper_trading else BotDatabase(name="assets/database_live.db")
@@ -86,6 +82,7 @@ class Trading:
         # List of all the quotes present in the database
         self.existing_quoteassets = list(set([dict(bot)['quote'] for bot in self.database.get_all_bots()]))             # ['ETH', 'BTC']
 
+        # To display the number of buys & sells executed after a candle
         self.nb_buys_this_candle  = 0
         self.nb_sells_this_candle = 0
 
@@ -95,15 +92,48 @@ class Trading:
         self.bot_token  = parser.get('creds', 'token')
         self.bot_chatID = parser.get('chatID', 'ID')
 
+        # Display some texts in color
+        colorama.init()
+        self.color = colorama.Fore.BLUE if self.paper_trading else colorama.Fore.GREEN
+
+        # Print the parameters that the user chose to run the program.
+        self.print_user_parameters()
+
+
+    def print_user_parameters(self):
+        """
+        Prints to the console the parameters that the user chose to run the program.
+        :return: Nothing.
+        """
+
+        print("Welcome!\nHubertTrader is running with the following parameters :")
+
+        table = [
+                 ['Trading mode', self.color + f"{'Paper trading' if self.paper_trading else 'Live Trading'}" + colorama.Style.RESET_ALL],  # Print the mode in the corresponding color, reset colorama right after
+                 ['Timeframe', self.timeframe],
+                 ['Send orders to Telegram', self.send_to_telegram],
+                 ['Strategy', self.strategy.name],
+                ]
+
+        if self.quotes_to_trade_on:
+            table.append(['Quotes to trade on', self.quotes_to_trade_on])
+        if self.bots_per_quote:
+            table.append(['Bots per quote', self.bots_per_quote])
+        if self.pairs_to_trade_on:
+            table.append(['Pairs to trade on', self.pairs_to_trade_on])
+
+        # Display the parameters in table format
+        print(tabulate(table,
+                       tablefmt="simple",   # plain|simple
+                       ))
+
 
     def start(self):
 
         self.initialize_databases()
 
-        colorama.init()
-        color = colorama.Fore.BLUE if self.paper_trading else colorama.Fore.GREEN
-        print(color + "\n_______________________________________________________________________________________________")
-        print(color + f"{'PAPER' if self.paper_trading else 'LIVE'} TRADING IS RUNNING.\nTimeframe : {self.timeframe}.\n")
+        print(self.color + "\n_______________________________________________________________________________________________")
+        print(self.color + f"{'PAPER' if self.paper_trading else 'LIVE'} TRADING IS RUNNING.\nTimeframe : {self.timeframe}.\n")
 
         while True:
 
@@ -575,7 +605,7 @@ class Trading:
         sp.text = f'Waiting for the next {self.timeframe} candle (at {next_candle.strftime("%H:%M")}) to start trading.'
 
         wait_till_after_next = False
-        estimated_duration_to_set_the_pairs = 30 # seconds
+        estimated_duration_to_set_the_pairs = 30 if not self.pairs_to_trade_on else 10 # seconds
         # Update the pairs just before the candle arrives
         if now < next_candle-timedelta(seconds=estimated_duration_to_set_the_pairs):
             # If we have more than 57 seconds before the candle, then wait
@@ -588,10 +618,10 @@ class Trading:
 
         sp.stop()
         sp.hide()
-        color = colorama.Fore.BLUE if self. paper_trading else colorama.Fore.GREEN
-        print(color + "_______________________________________")
-        print(color + f'Candle : {next_candle.strftime("%Y-%m-%d %H:%M") if not wait_till_after_next else after_next_candle.strftime("%Y-%m-%d %H:%M")} (local time).')
-        self.set_pairs_to_trade_on()          # Takes ~50secs to run
+        print(self.color + "_______________________________________")
+        print(self.color + f'Candle : {next_candle.strftime("%Y-%m-%d %H:%M") if not wait_till_after_next else after_next_candle.strftime("%Y-%m-%d %H:%M")} (local time).')
+        if not self.pairs_to_trade_on:
+            self.set_pairs_to_trade_on()          # Takes ~50secs to run
 
         sp.start()
         sp.show()
@@ -668,7 +698,7 @@ class Trading:
             self.database.save_bot(bot)			# Each row of the table 'bots' is made of the values of 'bot'.
 
 
-    def create_bots(self):
+    def create_all_bots(self):
         """ Creates all the possible bots on each quote if they don't exist. """
 
         sp       = yaspin()
@@ -708,7 +738,7 @@ class Trading:
 
     def initialize_databases(self):
 
-        # In account_balances.db, create a line for each quote (if they not already existing)
+        # In account_balances.db, create a line for each quote (if they not already exist)
         for quote in self.existing_quoteassets:
             self.database.initiate_db_account_balances(quote            = quote,
                                                        started_with     = self.exchange.GetAccountBalance(quote).get('free') if not self.paper_trading else 1, # if paper trading, start with a balance of 1 for each quote
@@ -722,7 +752,7 @@ class Trading:
         #     self.check_database_correctness()
         #     # self.update_bots_db_to_binance_values()
 
-        self.create_bots()
+        self.create_all_bots()
 
         # Clean the database at launch
         for bot in self.database.get_all_bots():
@@ -828,6 +858,7 @@ if __name__ == "__main__":
                       timeframe          = '1m',
                       quotes_to_trade_on = ['ETH'],
                       bots_per_quote     = 5,
+                      # pairs_to_trade_on  = ['ADAETH', 'LINKETH'],
                       send_to_telegram   = True,
                       )
 

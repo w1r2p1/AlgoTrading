@@ -207,7 +207,7 @@ class BackTesting:
             signal = 'sell' if price > high_of_last_red_candle else 'buy' if price < low_of_last_green_candle  else ''
 
         if self.strategy_name=='RSI':
-            # self.rsi_upper_threshold = self.rsi_lower_threshold
+            self.rsi_upper_threshold = self.rsi_lower_threshold
             rsi         = self.df[self.indicators_dict['1']['indic_name']].iloc[i]
             rsi_shifted = self.df[self.indicators_dict['1']['indic_name']].iloc[i-1]
             # bband_l		   = self.df['bband_l'].iloc[i]
@@ -246,8 +246,8 @@ class BackTesting:
         self.prepare_df()
 
         # Limit its size if need be
-        min_pct = 0.4 if parsed_timeframe[1]=='m' else 0
-        max_pct = 0.8 if parsed_timeframe[1]=='m' else 1
+        min_pct = 0.8 if parsed_timeframe[1]=='m' else 0
+        max_pct = 1 if parsed_timeframe[1]=='m' else 1
         start_index = kwargs.get('start_index', int(len(self.df.index)*min_pct))
         end_index   = kwargs.get('end_index',   int(len(self.df.index)*max_pct))
         self.df = self.df.iloc[start_index:end_index]
@@ -798,17 +798,17 @@ class OptunaOptimization:
 if __name__ == '__main__':
 
     # """ Run a single backtest """
-    BackTesting(timeframe		  = '1h',
+    BackTesting(timeframe		  = '1m',
                 quote    		  = 'ETH',
-                pair      		  = 'ETHBTC',
+                pair      		  = 'LTCETH',
                 strategy_name     = 'RSI',									                            # Crossover, MA_slope, Mean_Reversion_simple, Mean_Reversion_spread, Gap_and_go,
                 starting_balances = dict(quote=1, base=0),
                 # indic_1			  = dict(indicator='ssf', length=14*24, close='close'),		        # Crossover	( best : 5*24, 40*24 )
                 # indic_2			  = dict(indicator='ssf', length=31*24, close='close'),		        # Crossover
-                indic_1			  = dict(indicator='rsi',    length=169, close='close'),		        # RSI
+                indic_1			  = dict(indicator='rsi',    length=111, close='close'),		        # RSI
                 # indic_2			  = dict(indicator='bbands', length=40*24, close=f'rsi_{1*24}'),    # RSI   5-55, 10-50
-                rsi_lower_threshold = 54,		                                                        # RSI
-                rsi_upper_threshold = 54,		                                                        # RSI
+                rsi_lower_threshold = 34,		                                                        # RSI
+                rsi_upper_threshold = 34,		                                                        # RSI
                 # indic_1			  = dict(indicator='ssf',   length=100, close='close'),		        # MA_slope
                 # indic_2			  = dict(indicator='slope', length=30,  close='ssf_100'),	        # MA_slope
                 # indic_1			  = dict(indicator='ssf', length=500,  close='close'),		        # Mean_Reversion_simple
@@ -823,7 +823,7 @@ if __name__ == '__main__':
                 ).backtest(readjust_best_parameters=False)
 
     """ Run an Optuna Optimization """
-    # OptunaOptimization(timeframe     = '1h',
+    # OptunaOptimization(timeframe     = '1m',
     #                    quote         = 'ETH',
     #                    pair          = 'LTCETH',
     #                    strategy_name = 'RSI',
@@ -837,3 +837,4 @@ if __name__ == '__main__':
     # 15 min : {'length_1': 309, 'rsi_lower_threshold': 56, 'stop_loss_pct': 3}. Best is trial 42 with value: 15.25.
 
     # LTCETH ---------------------------------------------------------------------------------------------------------------------------------------
+    # 1 min :  {'length_1': 111, 'rsi_lower_threshold': 34, 'stop_loss_pct': 3}. Best is trial 71 with value: 0.11678832116788322.
